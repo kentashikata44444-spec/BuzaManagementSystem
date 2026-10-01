@@ -34,7 +34,7 @@ class SKL0001G01ViewModel(private val apiService: SKL0001G01ApiService) : ViewMo
                     return@launch
                 }
 
-                val isRunning = response.operationFlag.trim().equals("OK", ignoreCase = true)
+                val isRunning = response.operationFlag.trim().equals("Y", ignoreCase = true)
                 if (!isRunning) {
                     isSystemAvailable = false
                     errorMessage = "非稼働日の為、利用できません"
@@ -88,15 +88,23 @@ class SKL0001G01ViewModel(private val apiService: SKL0001G01ApiService) : ViewMo
         }
     }
 
-    // 2. ログイン処理（userCd と userName の両方をコールバックで渡すように変更）
-    // 引数に userCd を追加し、計4つの値をコールバックで渡すようにする
+    // 2. ログイン処理
     fun executeLogin(inputText: String, onSuccess: (userCd: String, userName: String, gymTntCd: String, gymTntMei: String) -> Unit) {
+        // システム利用不可（非稼働日・時間外）の場合は処理をブロック
+        if (!isSystemAvailable) {
+            if (errorMessage.isNullOrBlank()) {
+                errorMessage = "現在システムはご利用いただけません。"
+            }
+            return
+        }
+
         val rawInput = inputText.trim()
         if (rawInput.isBlank()) {
             errorMessage = "ユーザーIDを入力してください。"
             return
         }
 
+        // 現状は "_" 区切りのプレフィックスなどを考慮した処理
         val inputUser = rawInput.split("_", limit = 2)[0].trim()
 
         if (inputUser.isBlank()) {
@@ -123,7 +131,6 @@ class SKL0001G01ViewModel(private val apiService: SKL0001G01ApiService) : ViewMo
 
                     loggedInUserCd = inputUser
 
-                    // ▼ 4つの引数をすべて呼び出し元へ返す
                     onSuccess(inputUser, name, tntCd, tntMei)
                 } else {
                     errorMessage = response.message ?: "ログインに失敗しました。"

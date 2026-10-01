@@ -8,8 +8,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -33,18 +30,20 @@ fun SKL0001G01Screen(
     onLoginSuccess: (userCd: String, userName: String, gymTntCd: String, gymTntMei: String) -> Unit
 ) {
     var userCd by remember { mutableStateOf("") }
-    var isManualInput by remember { mutableStateOf(false) } // 手動入力切替フラグ
-    var isCameraActive by remember { mutableStateOf(false) } // ★ カメラ起動中フラグ
+    // var isManualInput by remember { mutableStateOf(false) } // 【手入力復活時用】手動入力切替フラグ
+    var isCameraActive by remember { mutableStateOf(false) } // カメラ起動中フラグ
     val scrollState = rememberScrollState()
 
     val context = LocalContext.current
 
-    // ★ カメラの実行時権限をリクエストするランチャーを追加
+    // カメラの実行時権限をリクエストするランチャー
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            isCameraActive = true
+            if (viewModel.isSystemAvailable) {
+                isCameraActive = true
+            }
         }
     }
 
@@ -107,6 +106,11 @@ fun SKL0001G01Screen(
                         modifier = Modifier.padding(end = 16.dp)
                     )
 
+                    /* =========================================================
+                     * 【手入力機能（一時コメントアウト中）】
+                     * 将来的に手入力を再開する場合は、このコメントアウトを外し、
+                     * 下部のカメラ用Boxをコメントアウト（または切り替え）してください。
+                     * =========================================================
                     if (isManualInput) {
                         OutlinedTextField(
                             value = userCd,
@@ -115,7 +119,10 @@ fun SKL0001G01Screen(
                             keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(
                                 onDone = {
-                                    // 手動入力されたテキストからアンダースコア前方を抽出
+                                    if (!viewModel.isSystemAvailable) {
+                                        return@KeyboardActions
+                                    }
+
                                     val inputCodeOnly = if (userCd.contains("_")) {
                                         userCd.substringBefore("_")
                                     } else {
@@ -123,7 +130,6 @@ fun SKL0001G01Screen(
                                     }
                                     userCd = inputCodeOnly
 
-                                    // 手動入力側 (onDone内)
                                     viewModel.executeLogin(inputCodeOnly) { userCd, userName, gymTntCd, gymTntMei ->
                                         onLoginSuccess(userCd, userName, gymTntCd, gymTntMei)
                                     }
@@ -132,37 +138,47 @@ fun SKL0001G01Screen(
                             modifier = Modifier.width(200.dp)
                         )
                     } else {
-                        // タップすると権限を確認してカメラが起動する
-                        Box(
-                            modifier = Modifier
-                                .width(200.dp)
-                                .height(56.dp)
-                                .border(1.dp, MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.small)
-                                .clickable {
-                                    when {
-                                        ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.CAMERA
-                                        ) == PackageManager.PERMISSION_GRANTED -> {
-                                            isCameraActive = true
-                                        }
-                                        else -> {
-                                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                        }
+                    ========================================================= */
+
+                    // 通常時のバーコード読込用ボックス（タップでカメラ起動）
+                    Box(
+                        modifier = Modifier
+                            .width(200.dp)
+                            .height(56.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.small)
+                            .clickable {
+                                if (!viewModel.isSystemAvailable) {
+                                    return@clickable
+                                }
+
+                                when {
+                                    ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.CAMERA
+                                    ) == PackageManager.PERMISSION_GRANTED -> {
+                                        isCameraActive = true
                                     }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (userCd.isEmpty()) "" else userCd,
-                                fontSize = 16.sp,
-                                color = if (userCd.isEmpty()) Color.Gray else Color.Black
-                            )
-                        }
+                                    else -> {
+                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (userCd.isEmpty()) "" else userCd,
+                            fontSize = 16.sp,
+                            color = if (userCd.isEmpty()) Color.Gray else Color.Black
+                        )
                     }
+
+                    /* =========================================================
+                    } // <-- isManualInput の閉じ括弧 (コメントアウト中)
+                    ========================================================= */
                 }
 
-                // 緊急時用（手動入力切替）のボタン
+                /* =========================================================
+                 * 【緊急時用（手動入力切替）ボタン（一時コメントアウト中）】
                 TextButton(
                     onClick = {
                         isManualInput = !isManualInput
@@ -175,6 +191,7 @@ fun SKL0001G01Screen(
                         fontSize = 14.sp
                     )
                 }
+                ========================================================= */
 
                 // 閉じるボタン
                 Button(
@@ -215,6 +232,11 @@ fun SKL0001G01Screen(
                 ) {
                     OcrCameraView(
                         onTextScanned = { scannedText ->
+                            if (!viewModel.isSystemAvailable) {
+                                isCameraActive = false
+                                return@OcrCameraView
+                            }
+
                             val userCodeOnly = if (scannedText.contains("_")) {
                                 scannedText.substringBefore("_")
                             } else {
@@ -224,7 +246,7 @@ fun SKL0001G01Screen(
                             isCameraActive = false
                             userCd = userCodeOnly
 
-                            // カメラ読込側 (onTextScanned内)
+                            // カメラ読込によるログイン実行
                             viewModel.executeLogin(userCodeOnly) { userCd, userName, gymTntCd, gymTntMei ->
                                 onLoginSuccess(userCd, userName, gymTntCd, gymTntMei)
                             }
