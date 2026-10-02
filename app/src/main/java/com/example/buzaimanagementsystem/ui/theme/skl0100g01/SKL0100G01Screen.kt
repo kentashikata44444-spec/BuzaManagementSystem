@@ -1,12 +1,15 @@
 package com.example.buzaimanagementsystem.ui.theme.skl0100g01
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -17,9 +20,7 @@ fun SKL0100G01Screen(
     userCd: String,
     gymTntCd: String,
     gymTntMei: String,
-    // メインメニューへ戻る時は 業務担当コード、業務担当名称、ユーザーID を渡す
     onNavigateToMain: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
-    // 下位画面へ進む時は 業務担当コード、業務担当名称、ユーザーID、遷移元区分 を渡す
     onNavigateToKobeTsukuba: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) -> Unit,
     onNavigateToSuzuka: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) -> Unit,
     onNavigateToKatsueiWarehouse: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) -> Unit
@@ -29,7 +30,6 @@ fun SKL0100G01Screen(
         viewModel.initParams(userCd, gymTntCd, gymTntMei)
     }
 
-    // ここでの遷移元区分（プロジェクト番号など）の定義例
     val currentSourceDivision = "SKL0100G01"
 
     Surface(
@@ -62,7 +62,7 @@ fun SKL0100G01Screen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 2段目：タイトルと下線をグループ化（Intrinsics.Max を使ってテキストの幅に完全一致させる）
+            // 2段目：タイトルと下線
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Start
@@ -77,7 +77,6 @@ fun SKL0100G01Screen(
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    // タイトルの文字幅に合わせた下線
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -89,7 +88,7 @@ fun SKL0100G01Screen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3段目：メインメニューボタン（右寄せ）
+            // 3段目：メインメニューボタン（右寄せ・【ここだけ】グレー背景＆黒枠に指定）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -100,10 +99,13 @@ fun SKL0100G01Screen(
                             onNavigateToMain(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei)
                         }
                     },
-                    // ▼ ボタンの幅を 130.dp から 150.dp に広げて文字が見切れないように修正
-                    modifier = Modifier.width(150.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .width(150.dp)
+                        .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                 ) {
-                    Text(text = "メインメニュー", fontSize = 14.sp, maxLines = 1)
+                    Text(text = "メインメニュー", fontSize = 14.sp, color = Color.Black, maxLines = 1)
                 }
             }
 
@@ -111,7 +113,7 @@ fun SKL0100G01Screen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 中央：各仕分けメニューボタン群
+            // 中央：各仕分けメニューボタン群（こちらは標準デザインのまま）
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -144,7 +146,7 @@ fun SKL0100G01Screen(
     }
 }
 
-// メインメニュー画面に合わせたサイズ（幅240dp, 高さ50dp）に統一
+// 中央の仕分けメニューボタン（デフォルトデザイン）
 @Composable
 private fun MenuButton(text: String, onClick: () -> Unit) {
     Button(

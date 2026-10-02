@@ -1,12 +1,15 @@
 package com.example.buzaimanagementsystem.ui.theme.skl0002g01
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,7 +28,6 @@ fun SKL0002G01Screen(
     onNavigateToKobetsu: () -> Unit,
     onExitApp: () -> Unit
 ) {
-    // 画面表示時にViewModelのデータを初期化
     LaunchedEffect(userCd, userName, gymTntCd, gymTntMei) {
         viewModel.initUserData(userCd, userName, gymTntCd, gymTntMei)
     }
@@ -42,10 +44,6 @@ fun SKL0002G01Screen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ==========================================
-            // 上部ヘッダー（3段構成）
-            // ==========================================
-
             // 1段目：業務担当名（右寄せ）
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -60,7 +58,7 @@ fun SKL0002G01Screen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 2段目：タイトルと下線をグループ化（Intrinsics.Max を使ってテキストの幅に完全一致させる）
+            // 2段目：タイトルと下線
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Start
@@ -75,7 +73,6 @@ fun SKL0002G01Screen(
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    // タイトルの文字幅に合わせた下線
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -87,24 +84,26 @@ fun SKL0002G01Screen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3段目：終了ボタン（右寄せ）
+            // 3段目：終了ボタン（右寄せ・【ここだけ】グレー背景＆黒枠に指定）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
                 Button(
                     onClick = { viewModel.onExitClicked(onExitApp) },
-                    modifier = Modifier.width(120.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .width(120.dp)
+                        .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                 ) {
-                    Text(text = "終了", fontSize = 14.sp, maxLines = 1)
+                    Text(text = "終了", fontSize = 14.sp, color = Color.Black, maxLines = 1)
                 }
             }
 
-            // ==========================================
-
             Spacer(modifier = Modifier.height(32.dp))
 
-            // 中央：各業務メニューボタン群
+            // 中央：各業務メニューボタン群（こちらは通常の標準ボタンデザインのまま）
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -143,7 +142,7 @@ fun SKL0002G01Screen(
     }
 }
 
-// MenuButtonはファイル内に1つだけ定義する
+// 中央の業務メニューボタン（デフォルトデザインのまま）
 @Composable
 private fun MenuButton(text: String, onClick: () -> Unit) {
     Button(
