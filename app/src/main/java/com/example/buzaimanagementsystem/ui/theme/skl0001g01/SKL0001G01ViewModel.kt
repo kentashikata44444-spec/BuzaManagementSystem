@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.buzaimanagementsystem.utils.FileLogger // 先ほどのFileLoggerクラス
+import com.example.buzaimanagementsystem.utils.FileLogger
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -31,6 +31,10 @@ class SKL0001G01ViewModel(
 
     // ログイン成功したユーザーコードを保持するプロパティ
     var loggedInUserCd by mutableStateOf("")
+        private set
+
+    // ログイン処理中の二重実行・ループを防ぐためのフラグ
+    var isLoggingIn by mutableStateOf(false)
         private set
 
     /**
@@ -67,6 +71,26 @@ class SKL0001G01ViewModel(
             try {
                 val response = apiService.getConditions()
 
+                // まずは稼働時間を先に取得して表示用文字列（displayTime）を確定させる
+                val timeData = response.operationTime
+                if (timeData != null && !timeData.suji1.isNullOrBlank() && !timeData.suji2.isNullOrBlank()) {
+                    fun parseHour(value: Any?): Int? {
+                        return when (value) {
+                            is Number -> value.toInt()
+                            is String -> value.toIntOrNull()
+                            else -> value?.toString()?.toIntOrNull()
+                        }
+                    }
+
+                    val startHour = parseHour(timeData.suji1)
+                    val endHour = parseHour(timeData.suji2)
+
+                    if (startHour != null && endHour != null) {
+                        displayTime = "%02d:00～%02d:00".format(startHour, endHour)
+                    }
+                }
+
+                // 次に稼働フラグのチェックを行う
                 if (response.operationFlag.isNullOrBlank()) {
                     writeLog("W", "checkSystemAvailability: 稼働フラグが取得できませんでした")
                     isSystemAvailable = false
@@ -74,7 +98,7 @@ class SKL0001G01ViewModel(
                     return@launch
                 }
 
-                val isRunning = response.operationFlag.trim().equals("Y", ignoreCase = true)
+                val isRunning = response.operationFlag.trim().equals("OK", ignoreCase = true)
                 if (!isRunning) {
                     writeLog("W", "checkSystemAvailability: 非稼働日のため利用不可 (operationFlag=${response.operationFlag})")
                     isSystemAvailable = false
@@ -82,7 +106,6 @@ class SKL0001G01ViewModel(
                     return@launch
                 }
 
-                val timeData = response.operationTime
                 if (timeData == null || timeData.suji1.isNullOrBlank() || timeData.suji2.isNullOrBlank()) {
                     writeLog("W", "checkSystemAvailability: 稼働時間のデータが不正です")
                     isSystemAvailable = false
@@ -102,7 +125,6 @@ class SKL0001G01ViewModel(
                 val endHour = parseHour(timeData.suji2)
 
                 if (startHour != null && endHour != null) {
-                    displayTime = "%02d:00～%02d:00".format(startHour, endHour)
                     val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
 
                     val allowed = if (startHour <= endHour) {
@@ -129,7 +151,7 @@ class SKL0001G01ViewModel(
 
             } catch (e: Exception) {
                 isSystemAvailable = false
-                writeLog("E", "checkSystemAvailability: DB接続エラーが発生しました", e)
+                writeLog("E", "checkSystemAvailability: 稼働状況チェック時のDB接続エラーが発生しました", e)
                 errorMessage = "ＤＢ接続に失敗しました \nシステム管理者に問合せ願います"
             }
         }
@@ -139,6 +161,12 @@ class SKL0001G01ViewModel(
      * ログイン処理を実行する
      */
     fun executeLogin(inputText: String, onSuccess: (userCd: String, userName: String, gymTntCd: String, gymTntMei: String) -> Unit) {
+        // すでにログイン処理中の場合は重複リクエストをブロック
+        if (isLoggingIn) {
+            writeLog("W", "executeLogin: 既にログイン処理中のため、リクエストをスキップします")
+            return
+        }
+
         writeLog("D", "executeLogin: ログイン処理を開始します (入力長: ${inputText.length})")
 
         // システム利用不可（非稼働日・時間外）の場合は処理をブロック
@@ -150,14 +178,20 @@ class SKL0001G01ViewModel(
             return
         }
 
-        val rawInput = inputText.trim()
+        val rawInput = inputText
         if (rawInput.isBlank()) {
             writeLog("W", "executeLogin: 入力文字列が空です")
             errorMessage = "ユーザーIDを入力してください。"
             return
         }
 
-        // "_" 区切りのプレフィックスなどを考慮した処理
+        // ▼ 全角・半角スペース（空白文字）が含まれている場合は拒否する
+        if (rawInput.any { it.isWhitespace() }) {
+            writeLog("W", "executeLogin: 入力値にスペースが含まれているため拒否します")
+            errorMessage = "このQRコードは使用できません。"
+            return
+        }
+
         val inputUser = rawInput.split("_", limit = 2)[0].trim()
 
         if (inputUser.isBlank()) {
@@ -165,6 +199,10 @@ class SKL0001G01ViewModel(
             errorMessage = "ユーザーIDが正しくありません。"
             return
         }
+
+        // 処理開始：フラグをONにする
+        isLoggingIn = true
+        errorMessage = null // ログイン試行時は一度エラーメッセージをクリア
 
         viewModelScope.launch {
             try {
@@ -184,18 +222,30 @@ class SKL0001G01ViewModel(
                     val tntCd = response.data?.gymTntCd ?: ""
                     val tntMei = response.data?.gymTntMei ?: ""
 
+                    // 業務担当マスタの取得チェック
+                    if (tntCd.isBlank() || tntMei.isBlank()) {
+                        writeLog("W", "executeLogin: 業務担当マスタの取得に失敗しました（データ不備） (userCd=$inputUser)")
+                        errorMessage = "業務担当マスタの取得に失敗しました \nシステム管理者に問合せ願います"
+                        isLoggingIn = false
+                        return@launch
+                    }
+
                     loggedInUserCd = inputUser
                     writeLog("I", "executeLogin: ログイン成功 (userCd=$inputUser, name=$name, 業務担当=($tntCd:$tntMei))")
 
                     onSuccess(inputUser, name, tntCd, tntMei)
                 } else {
-                    writeLog("W", "executeLogin: ログイン失敗メッセージ: ${response.message}")
+                    // サーバー側で「すでにログイン中」などのビジネスロジックエラー
+                    writeLog("W", "executeLogin: ログイン失敗（サーバー判定）: ${response.message} (userCd=$inputUser)")
                     errorMessage = response.message ?: "ログインに失敗しました。"
+                    isLoggingIn = false
                 }
 
             } catch (e: Exception) {
-                writeLog("E", "executeLogin: 通信・システムエラーが発生しました", e)
+                // 通信エラーや予期せぬシステム例外
+                writeLog("E", "executeLogin: ログイン処理中の通信・システムエラーが発生しました (userCd=$inputUser)", e)
                 errorMessage = "通信エラー、またはシステムエラーが発生しました。\n(${e.message})"
+                isLoggingIn = false
             }
         }
     }

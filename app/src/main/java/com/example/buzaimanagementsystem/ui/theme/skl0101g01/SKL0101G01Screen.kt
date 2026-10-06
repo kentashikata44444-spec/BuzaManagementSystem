@@ -25,8 +25,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.buzaimanagementsystem.OcrCameraView
-
 import com.example.buzaimanagementsystem.R
+import com.example.buzaimanagementsystem.utils.FileLogger
+
+private const val TAG = "SKL0101G01Screen"
 
 @Composable
 fun SKL0101G01Screen(
@@ -57,6 +59,7 @@ fun SKL0101G01Screen(
     }
 
     LaunchedEffect(userCd, gymTntCd, gymTntMei, sourceDivision) {
+        FileLogger.writeLog(context, "DEBUG", TAG, "画面初期化パラメータ受信: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei, sourceDivision=$sourceDivision")
         viewModel.initParams(userCd, gymTntCd, gymTntMei, sourceDivision)
         viewModel.clearInput()
         if (!hasCameraPermission) {
@@ -72,7 +75,6 @@ fun SKL0101G01Screen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
-                .padding(16.dp)
         ) {
             // === 裏で常にカメラを起動して自動スキャンさせる ===
             if (hasCameraPermission) {
@@ -89,19 +91,28 @@ fun SKL0101G01Screen(
                 }
             }
 
-            // === 通常の仕分け画面UI ===
+            // === 通常の仕分け画面UI（他画面とパディング等を統一） ===
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
                 verticalArrangement = Arrangement.Top,
                 horizontalAlignment = Alignment.Start
             ) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // ==========================================
+                // 上部ヘッダー（3段構成）
+                // ==========================================
+
                 // 1段目：業務担当名（右寄せ）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
                     Text(
-                        text = gymTntMei.ifEmpty { "業務担当名" },
+                        text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
                         fontSize = 14.sp,
                         color = Color.Black
                     )
@@ -109,25 +120,40 @@ fun SKL0101G01Screen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 2段目：タイトル
-                Column(
-                    modifier = Modifier.fillMaxWidth()
+                // 2段目：タイトルと下線
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
                 ) {
-                    Text(
-                        text = "仕分け",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = "(保管BOX・保管資材確定)",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
+                    Column(
+                        modifier = Modifier.width(IntrinsicSize.Max)
+                    ) {
+                        Text(
+                            text = "仕分け",
+                            fontSize = 22.sp,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "(保管BOX・保管資材確定)",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black,
+                            maxLines = 1
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // 3段目：仕分け・一時保管メニューボタン（右寄せ・グレー＆黒枠）
                 Row(
@@ -136,6 +162,7 @@ fun SKL0101G01Screen(
                 ) {
                     Button(
                         onClick = {
+                            FileLogger.writeLog(context, "DEBUG", TAG, "仕分け・一時保管メニューボタン押下: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei")
                             onNavigateToMenu(userCd, gymTntCd, gymTntMei)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
@@ -145,10 +172,13 @@ fun SKL0101G01Screen(
                         Text(
                             text = "仕分け・一時保管メニュー",
                             color = Color.Black,
-                            fontSize = 14.sp
+                            fontSize = 14.sp,
+                            maxLines = 1
                         )
                     }
                 }
+
+                // ==========================================
 
                 // エラーメッセージ表示エリア
                 if (viewModel.errorMessage != null) {
@@ -345,7 +375,7 @@ fun SKL0101G01Screen(
                                 )
                             }
 
-                            // 台車（2種類あるため横並びか縦並びに配置）
+                            // 台車
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -367,7 +397,7 @@ fun SKL0101G01Screen(
 
                             // 棚
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                Text(text = "Tana", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Image(
                                     painter = painterResource(id = R.drawable.tana),

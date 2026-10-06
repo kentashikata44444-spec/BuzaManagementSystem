@@ -32,6 +32,10 @@ fun SKL0001G01Screen(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
+    // ▼ 同じQRコードの連続読み込みを防ぐための変数（最後に読んだテキストと、その時刻）
+    var lastScannedText by remember { mutableStateOf<String?>(null) }
+    var lastScannedTime by remember { mutableStateOf(0L) }
+
     // カメラ権限が許可されているかどうかの状態
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -60,26 +64,29 @@ fun SKL0001G01Screen(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            // === ① 裏で常にカメラを起動しておく（画面には表示されないようにサイズを 0 にするか透明にする） ===
+            // === ① 裏で常にカメラを起動しておく ===
             if (hasCameraPermission && viewModel.isSystemAvailable) {
                 Box(
-                    modifier = Modifier
-                        .size(1.dp) // ほぼ見えないサイズで常時バックグラウンド稼働
+                    modifier = Modifier.size(1.dp) // ほぼ見えないサイズで常時バックグラウンド稼働
                 ) {
                     OcrCameraView(
                         onTextScanned = { scannedText ->
-                            if (!viewModel.isSystemAvailable) return@OcrCameraView
+                            if (!viewModel.isSystemAvailable || viewModel.isLoggingIn) return@OcrCameraView
 
-                            val userCodeOnly = if (scannedText.contains("_")) {
-                                scannedText.substringBefore("_")
-                            } else {
-                                scannedText
+                            val currentTime = System.currentTimeMillis()
+
+                            // ▼ 同じテキストかつ、前回のスキャンから3秒以内の場合は連続読み込みとみなして無視する
+                            if (scannedText == lastScannedText && (currentTime - lastScannedTime) < 3000) {
+                                return@OcrCameraView
                             }
 
-                            userCd = userCodeOnly
+                            // 今回の読み取り情報を更新
+                            lastScannedText = scannedText
+                            lastScannedTime = currentTime
 
-                            // カメラ読込によるログイン実行
-                            viewModel.executeLogin(userCodeOnly) { uCd, userName, gymTntCd, gymTntMei ->
+                            // 生の読み取り文字列をそのままViewModelに渡す
+                            viewModel.executeLogin(scannedText) { uCd, userName, gymTntCd, gymTntMei ->
+                                userCd = uCd
                                 onLoginSuccess(uCd, userName, gymTntCd, gymTntMei)
                             }
                         }
@@ -114,7 +121,7 @@ fun SKL0001G01Screen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = viewModel.errorMessage ?: "ユーザーIDのバーコードを読み込んでください",
+                        text = viewModel.errorMessage ?: "ユーザーIDのQRコードを読み込んでください",
                         fontSize = 14.sp,
                         color = if (viewModel.errorMessage != null) MaterialTheme.colorScheme.error else Color.Black
                     )
@@ -134,7 +141,7 @@ fun SKL0001G01Screen(
                         modifier = Modifier.padding(end = 16.dp)
                     )
 
-                    // バーコード読込結果表示用のBox（タップ不要で自動入力されます）
+                    // バーコード読込結果表示用のBox
                     Box(
                         modifier = Modifier
                             .width(200.dp)

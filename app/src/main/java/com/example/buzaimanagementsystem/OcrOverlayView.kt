@@ -68,6 +68,10 @@ fun OcrCameraView(
 
     var isProcessing by remember { mutableStateOf(false) }
 
+    // ▼ 同じコードの連続読み込みを防ぐための変数（警告が出ない mutableLongStateOf を使用）
+    var lastScannedText by remember { mutableStateOf<String?>(null) }
+    var lastScannedTime by remember { mutableLongStateOf(0L) }
+
     val previewView = remember {
         PreviewView(context).apply {
             scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -107,6 +111,17 @@ fun OcrCameraView(
                         imageProxy = imageProxy,
                         barcodeScanner = barcodeScanner,
                         onTextScanned = { scannedText ->
+                            val currentTime = System.currentTimeMillis()
+
+                            // ▼ 同じQRコードが3秒以内に連続で検知された場合は無視する
+                            if (scannedText == lastScannedText && (currentTime - lastScannedTime) < 3000) {
+                                return@processBarcodeProxy
+                            }
+
+                            // 読み取り情報を更新
+                            lastScannedText = scannedText
+                            lastScannedTime = currentTime
+
                             writeLog("I", "バーコード読み取り成功: scannedText=$scannedText")
                             onTextScanned(scannedText)
                         },

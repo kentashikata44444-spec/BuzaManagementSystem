@@ -10,9 +10,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.buzaimanagementsystem.utils.FileLogger
+
+private const val TAG = "SKL0100G01Screen"
 
 @Composable
 fun SKL0100G01Screen(
@@ -25,12 +29,13 @@ fun SKL0100G01Screen(
     onNavigateToSuzuka: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) -> Unit,
     onNavigateToKatsueiWarehouse: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) -> Unit
 ) {
-    // 画面表示時にViewModelへパラメータを保持させる
+    val context = LocalContext.current
+
+    // 画面表示時にViewModelへパラメータを保持させる ＆ 初期化引数をログ出力
     LaunchedEffect(userCd, gymTntCd, gymTntMei) {
+        FileLogger.writeLog(context, "DEBUG", TAG, "画面初期化パラメータ受信: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei")
         viewModel.initParams(userCd, gymTntCd, gymTntMei)
     }
-
-    val currentSourceDivision = "SKL0100G01"
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -55,7 +60,7 @@ fun SKL0100G01Screen(
             ) {
                 val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
                 Text(
-                    text = if (displayName.isNotEmpty()) "業務担当名: $displayName" else "業務担当名",
+                    text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
                     fontSize = 14.sp
                 )
             }
@@ -88,13 +93,14 @@ fun SKL0100G01Screen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3段目：メインメニューボタン（右寄せ・【ここだけ】グレー背景＆黒枠に指定）
+            // 3段目：メインメニューボタン（右寄せ）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
                 Button(
                     onClick = {
+                        FileLogger.writeLog(context, "DEBUG", TAG, "メインメニューボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}")
                         viewModel.onButtonClicked {
                             onNavigateToMain(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei)
                         }
@@ -113,7 +119,7 @@ fun SKL0100G01Screen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 中央：各仕分けメニューボタン群（こちらは標準デザインのまま）
+            // 中央：各仕分けメニューボタン群
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -126,18 +132,24 @@ fun SKL0100G01Screen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     MenuButton(text = "神戸・筑波支給品") {
+                        val sourceDivision = "1" //
+                        FileLogger.writeLog(context, "DEBUG", TAG, "神戸・筑波支給品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
                         viewModel.onButtonClicked {
-                            onNavigateToKobeTsukuba(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, currentSourceDivision)
+                            onNavigateToKobeTsukuba(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
                         }
                     }
                     MenuButton(text = "鈴鹿支給品") {
+                        val sourceDivision = "2" //[cite: 2]
+                        FileLogger.writeLog(context, "DEBUG", TAG, "鈴鹿支給品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
                         viewModel.onButtonClicked {
-                            onNavigateToSuzuka(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, currentSourceDivision)
+                            onNavigateToSuzuka(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
                         }
                     }
                     MenuButton(text = "勝英購入品・倉庫品") {
+                        val sourceDivision = "3" //[cite: 2]
+                        FileLogger.writeLog(context, "DEBUG", TAG, "勝英購入品・倉庫品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
                         viewModel.onButtonClicked {
-                            onNavigateToKatsueiWarehouse(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, currentSourceDivision)
+                            onNavigateToKatsueiWarehouse(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
                         }
                     }
                 }

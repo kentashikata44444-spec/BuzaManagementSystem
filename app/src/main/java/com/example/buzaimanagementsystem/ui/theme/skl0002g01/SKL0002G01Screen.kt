@@ -51,7 +51,7 @@ fun SKL0002G01Screen(
             ) {
                 val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
                 Text(
-                    text = if (displayName.isNotEmpty()) "業務担当名: $displayName" else "業務担当名",
+                    text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
                     fontSize = 14.sp
                 )
             }
