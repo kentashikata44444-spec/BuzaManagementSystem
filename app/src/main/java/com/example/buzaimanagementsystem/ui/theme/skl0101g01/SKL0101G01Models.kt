@@ -4,30 +4,54 @@ import com.google.gson.annotations.SerializedName
 
 // ロケーション中分類マスタ
 data class SltRokeshonchuM(
-    @SerializedName("CHUBUNRUICD") val chubunruiCd: String,
-    @SerializedName("CHUBUNRUIMEISHO") val chubunruiMeisho: String?,
-    @SerializedName("JOTAIKBN") val jotaiKbn: String
+    @SerializedName(value = "CHUBUNRUICD", alternate = ["chubunruiCd", "ChubunruiCd"])
+    val chubunruiCd: String,
+
+    @SerializedName(value = "CHUBUNRUIMEISHO", alternate = ["chubunruiMeisho", "ChubunruiMeisho"])
+    val chubunruiMeisho: String?,
+
+    @SerializedName(value = "JOTAIKBN", alternate = ["jotaiKbn", "JotaiKbn"])
+    val jotaiKbn: String
 )
 
 // ロケーション小分類マスタ
 data class SltRokeshonshoM(
-    @SerializedName("SHOBUNRUICD") val shobunruiCd: String,
-    @SerializedName("SHOBUNRUIMEISHO") val shobunruiMeisho: String?,
-    @SerializedName("JOTAIKBN") val jotaiKbn: String
+    @SerializedName(value = "SHOBUNRUICD", alternate = ["shobunruiCd", "ShobunruiCd"])
+    val shobunruiCd: String,
+
+    @SerializedName(value = "SHOBUNRUIMEISHO", alternate = ["shobunruiMeisho", "ShobunruiMeisho"])
+    val shobunruiMeisho: String?,
+
+    @SerializedName(value = "JOTAIKBN", alternate = ["jotaiKbn", "JotaiKbn"])
+    val jotaiKbn: String
 )
 
 // 保管BOX使用情報
 data class SltHokanBoxSiyoJoho(
-    @SerializedName("HOKANBOXCD") val hokanBoxCd: String,
-    @SerializedName("SEIHINBANGO") val seihinBango: String,
-    @SerializedName("HOKANSIZAIMEISHO") val hokanShizaiMeisho: String?,
-    @SerializedName("JOTAIKBN") val jotaiKbn: String
+    @SerializedName(value = "HOKANBOXCD", alternate = ["hokanBoxCd", "HokanBoxCd"])
+    val hokanBoxCd: String,
+
+    @SerializedName(value = "SEIHINBANGO", alternate = ["seihinBango", "SeihinBango"])
+    val seihinBango: String,
+
+    @SerializedName(value = "HOKANSIZAIMEISHO", alternate = ["hokanShizaiMeisho", "HokanShizaiMeisho"])
+    val hokanShizaiMeisho: String?,
+
+    @SerializedName(value = "JOTAIKBN", alternate = ["jotaiKbn", "JotaiKbn"])
+    val jotaiKbn: String
 )
 
 // 保管資材使用情報
 data class SltHokanShizaiSiyoJoho(
-    @SerializedName("HOKANSIZAICD") val hokanShizaiCd: String,
-    @SerializedName("SEIHINBANGO") val seihinBango: String,
-    @SerializedName("HOKANSIZAIMEISHO") val hokanShizaiMeisho: String?,
-    @SerializedName("JOTAIKBN") val jotaiKbn: String
+    @SerializedName(value = "HOKANSIZAICD", alternate = ["hokanShizaiCd", "HokanShizaiCd"])
+    val hokanShizaiCd: String,
+
+    @SerializedName(value = "SEIHINBANGO", alternate = ["seihinBango", "SeihinBango"])
+    val seihinBango: String,
+
+    @SerializedName(value = "HOKANSIZAIMEISHO", alternate = ["hokanShizaiMeisho", "HokanShizaiMeisho"])
+    val hokanShizaiMeisho: String?,
+
+    @SerializedName(value = "JOTAIKBN", alternate = ["jotaiKbn", "JotaiKbn"])
+    val jotaiKbn: String
 )

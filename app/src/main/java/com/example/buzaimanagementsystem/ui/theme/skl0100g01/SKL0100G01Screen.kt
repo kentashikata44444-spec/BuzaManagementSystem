@@ -131,7 +131,7 @@ fun SKL0100G01Screen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    MenuButton(text = "神戸・筑波支給品") {
+                    MenuButton(text = "神戸支給品") {
                         val sourceDivision = "1" //
                         FileLogger.writeLog(context, "DEBUG", TAG, "神戸・筑波支給品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
                         viewModel.onButtonClicked {

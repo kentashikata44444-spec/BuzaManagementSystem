@@ -83,8 +83,9 @@ fun SKL0101G01Screen(
                 ) {
                     OcrCameraView(
                         onTextScanned = { scannedText ->
-                            viewModel.processScannedCode(scannedText) { chuCode, chuName, shoCode, shoName ->
-                                onNavigateToShitei(userCd, gymTntCd, gymTntMei, chuCode, chuName, shoCode, shoName, sourceDivision)
+                            // ▼ 8つの引数を受け取るように修正します
+                            viewModel.processScannedCode(scannedText) { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
+                                onNavigateToShitei(uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv)
                             }
                         }
                     )
@@ -225,7 +226,7 @@ fun SKL0101G01Screen(
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
-                            text = "※『保管BOX』または『保管資材』の\n バーコードを読み込んでください",
+                            text = "※『保管BOX』または『保管資材』の\n    QRを読み込んでください",
                             fontSize = 14.sp,
                             color = Color.Black,
                             textAlign = TextAlign.Start
@@ -397,7 +398,7 @@ fun SKL0101G01Screen(
 
                             // 棚
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "Tana", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Image(
                                     painter = painterResource(id = R.drawable.tana),

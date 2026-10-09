@@ -70,20 +70,14 @@ class SKL0101G01ViewModel(
         }
     }
 
-    /**
-     * パラメータを初期化する
-     */
     fun initParams(userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) {
-        writeLog("D", "initParams: パラメータを初期化します (userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei, sourceDivision=$sourceDivision)")
+        writeLog("D", "initParams: パラメータ初期化 (userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei, sourceDivision=$sourceDivision)")
         this.userCd = userCd
         this.gymTntCd = gymTntCd
         this.gymTntMei = gymTntMei
         this.sourceDivision = sourceDivision
     }
 
-    /**
-     * 画面再表示時に入力値やメッセージをクリアする
-     */
     fun clearInput() {
         writeLog("D", "clearInput: 入力内容とメッセージをクリアします")
         hokanBoxCode = ""
@@ -96,20 +90,20 @@ class SKL0101G01ViewModel(
     }
 
     /**
-     * スキャンされたQRコードを解析・処理する
+     * スキャンされたQRコードを解析し、sourceDivision ("1", "2", "3") に応じて処理を分岐する
      */
     fun processScannedCode(
         scannedText: String,
-        onNavigateToShitei: (chuCode: String, chuName: String, shoCode: String, shoName: String) -> Unit
+        onNavigateToShitei: (userCd: String, gymTntCd: String, gymTntMei: String, chuCode: String, chuName: String, shoCode: String, shoName: String, sourceDiv: String) -> Unit
     ) {
-        writeLog("D", "processScannedCode: QRコードの処理を開始します (scannedText=$scannedText)")
+        writeLog("D", "processScannedCode: 処理開始 (scannedText=$scannedText, sourceDivision=$sourceDivision)")
         errorMessage = null
         infoMessage = null
 
         val tokens = scannedText.split("|")
         if (tokens.isEmpty()) {
-            writeLog("W", "processScannedCode: トークンが空です (scannedText=$scannedText)")
-            errorMessage = "保管BOXまたは、保管資材以外が読み込まれました\n※『保管BOX』または『保管資材』のQRコードを読み込んでください"
+            errorMessage = "※『保管BOX』または『保管資材』のQRコードを\n読み込んでください"
+            writeLog("W", "processScannedCode: トークンが空です - $errorMessage")
             return
         }
 
@@ -117,20 +111,18 @@ class SKL0101G01ViewModel(
         when (prefix) {
             "HSIZAI" -> {
                 if (tokens.size < 2) {
-                    writeLog("W", "processScannedCode: HSIZAIの形式が不正です (tokens.size=${tokens.size})")
                     errorMessage = "QRコードの形式が不正です"
+                    writeLog("W", "processScannedCode [HSIZAI]: QRコードの形式が不正です (tokens.size=${tokens.size})")
                     return
                 }
-                // 不要なスペースを削除するよう .trim() を追加
                 val chuCode = tokens[1].trim()
-                writeLog("D", "processScannedCode: 保管資材コードを検知 (chuCode=$chuCode)")
 
                 viewModelScope.launch {
                     try {
                         val masterResponse = apiService.getChuMaster(chuCode)
                         if (!masterResponse.isSuccessful || masterResponse.body() == null) {
-                            writeLog("W", "processScannedCode: 保管資材がマスタに存在しません (chuCode=$chuCode)")
                             errorMessage = "読み込まれた保管資材がマスタに存在しません\n確認をしてください"
+                            writeLog("W", "processScannedCode [HSIZAI]: 保管資材マスタが存在しません (chuCode=$chuCode)")
                             return@launch
                         }
                         val master = masterResponse.body()!!
@@ -138,68 +130,74 @@ class SKL0101G01ViewModel(
                         hokanShizaiCode = chuCode
 
                         if (chuCode.contains("JIKA")) {
-                            writeLog("I", "processScannedCode: 自架置が読み込まれました (chuCode=$chuCode)")
                             infoMessage = "自架置が読み込まれました"
+                            writeLog("I", "processScannedCode [HSIZAI]: 自架置が読み込まれました (chuCode=$chuCode)")
                             return@launch
                         }
 
-                        val siyoResponse = apiService.getHokanShizaiSiyoJoho(chuCode)
-                        if (!siyoResponse.isSuccessful || siyoResponse.body() == null) {
-                            writeLog("D", "processScannedCode: 保管資材の使用情報なし。指定画面へ遷移します (chuCode=$chuCode)")
-                            onNavigateToShitei(chuCode, chubunruiMeisho, "", "")
-                        } else {
-                            val data = siyoResponse.body()!!
-                            writeLog("I", "processScannedCode: 保管資材の使用情報を取得 (seihinBango=${data.seihinBango})")
-                            infoMessage = "保管資材には、取得した製品No.(${data.seihinBango})を保管しています"
-                            seihinBango = data.seihinBango
+                        // 遷移元区分に応じた画面名称の決定
+                        val targetScreenName = when (sourceDivision) {
+                            "1" -> "スマホ仕分け（神戸・筑波支給品現品確定）"
+                            "2" -> "スマホ仕分け（鈴鹿支給品現品確定）"
+                            "3" -> "スマホ仕分け（勝英購入品・倉庫品現品確定）"
+                            else -> "スマホ仕分け（現品確定）"
                         }
+
+                        infoMessage = "中分類の名称(${chubunruiMeisho})が取得できました"
+                        writeLog("I", "processScannedCode [HSIZAI]: 保管資材の中分類マスタから名称を取得しました (chuCode=$chuCode, chubunruiMeisho=$chubunruiMeisho)。$targetScreenName へ遷移します。")
+
+                        // 指定画面へ遷移
+                        onNavigateToShitei(userCd, gymTntCd, gymTntMei, chuCode, chubunruiMeisho, "", "", sourceDivision)
+
                     } catch (e: Exception) {
-                        writeLog("E", "processScannedCode: HSIZAI処理中の通信エラー", e)
+                        writeLog("E", "HSIZAI処理中の通信エラー", e)
                         errorMessage = "通信エラーが発生しました: ${e.localizedMessage}"
                     }
                 }
             }
             "HBOX" -> {
                 if (tokens.size < 2) {
-                    writeLog("W", "processScannedCode: HBOXの形式が不正です (tokens.size=${tokens.size})")
                     errorMessage = "QRコードの形式が不正です"
+                    writeLog("W", "processScannedCode [HBOX]: QRコードの形式が不正です (tokens.size=${tokens.size})")
                     return
                 }
-                // 不要なスペースを削除するよう .trim() を追加
                 val shoCode = tokens[1].trim()
-                writeLog("D", "processScannedCode: 保管BOXコードを検知 (shoCode=$shoCode)")
 
                 viewModelScope.launch {
                     try {
                         val masterResponse = apiService.getShoMaster(shoCode)
                         if (!masterResponse.isSuccessful || masterResponse.body() == null) {
-                            writeLog("W", "processScannedCode: 保管BOXがマスタに存在しません (shoCode=$shoCode)")
                             errorMessage = "読み込まれた保管BOXがマスタに存在しません\n確認をしてください"
+                            writeLog("W", "processScannedCode [HBOX]: 保管BOXマスタが存在しません (shoCode=$shoCode)")
                             return@launch
                         }
                         val master = masterResponse.body()!!
                         shobunruiMeisho = master.shobunruiMeisho ?: ""
                         hokanBoxCode = shoCode
 
-                        val siyoResponse = apiService.getHokanBoxSiyoJoho(shoCode)
-                        if (!siyoResponse.isSuccessful || siyoResponse.body() == null) {
-                            writeLog("D", "processScannedCode: 保管BOXの使用情報なし。指定画面へ遷移します (shoCode=$shoCode)")
-                            onNavigateToShitei("", "", shoCode, shobunruiMeisho)
-                        } else {
-                            val data = siyoResponse.body()!!
-                            writeLog("I", "processScannedCode: 保管BOXの使用情報を取得 (seihinBango=${data.seihinBango})")
-                            infoMessage = "保管BOXには、取得した製品No.(${data.seihinBango})を保管しています"
-                            seihinBango = data.seihinBango
+                        // 遷移元区分に応じた画面名称の決定
+                        val targetScreenName = when (sourceDivision) {
+                            "1" -> "スマホ仕分け（神戸・筑波支給品現品確定）"
+                            "2" -> "スマホ仕分け（鈴鹿支給品現品確定）"
+                            "3" -> "スマホ仕分け（勝英購入品・倉庫品現品確定）"
+                            else -> "スマホ仕分け（現品確定）"
                         }
+
+                        infoMessage = "小分類の名称(${shobunruiMeisho})が取得できました"
+                        writeLog("I", "processScannedCode [HBOX]: 保管BOXの小分類マスタから名称を取得しました (shoCode=$shoCode, shobunruiMeisho=$shobunruiMeisho)。$targetScreenName へ遷移します。")
+
+                        // 指定画面へ遷移
+                        onNavigateToShitei(userCd, gymTntCd, gymTntMei, "", "", shoCode, shobunruiMeisho, sourceDivision)
+
                     } catch (e: Exception) {
-                        writeLog("E", "processScannedCode: HBOX処理中の通信エラー", e)
+                        writeLog("E", "HBOX処理中の通信エラー", e)
                         errorMessage = "通信エラーが発生しました: ${e.localizedMessage}"
                     }
                 }
             }
             else -> {
-                writeLog("W", "processScannedCode: 未知のプレフィックスです (prefix=$prefix)")
-                errorMessage = "保管BOXまたは、保管資材以外が読み込まれました\n※『保管BOX』または『保管資材』のQRコードを読み込んでください"
+                errorMessage = "※『保管BOX』または『保管資材』のQRコードを\n読み込んでください"
+                writeLog("W", "processScannedCode: 不明なプレフィックスです (prefix=$prefix)")
             }
         }
     }

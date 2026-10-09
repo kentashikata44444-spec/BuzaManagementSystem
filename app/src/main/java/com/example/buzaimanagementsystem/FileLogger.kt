@@ -9,7 +9,14 @@ import java.util.Locale
 
 object FileLogger {
     private const val TAG = "FileLogger"
-    private const val LOG_FILE_NAME = "app_debug_log.txt"
+
+    /**
+     * 日付を含んだファイル名を動的に生成する
+     */
+    private fun getLogFileName(): String {
+        val dateString = SimpleDateFormat("yyyy-MM-dd", Locale.JAPAN).format(Date())
+        return "app_debug_log_$dateString.txt"
+    }
 
     /**
      * ログをファイルに追記する
@@ -19,8 +26,7 @@ object FileLogger {
             val timeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.JAPAN).format(Date())
             val logEntry = "[$timeStamp] [$level] [$tag]: $message\n"
 
-            // アプリの内部ストレージ（filesDir）に保存する場合
-            val logFile = File(context.filesDir, LOG_FILE_NAME)
+            val logFile = File(context.filesDir, getLogFileName())
             logFile.appendText(logEntry)
 
         } catch (e: Exception) {
@@ -32,7 +38,7 @@ object FileLogger {
      * 保存されたログファイルのパスを取得する（確認用）
      */
     fun getLogFilePath(context: Context): String {
-        return File(context.filesDir, LOG_FILE_NAME).absolutePath
+        return File(context.filesDir, getLogFileName()).absolutePath
     }
 
     /**
@@ -40,7 +46,7 @@ object FileLogger {
      */
     fun readLog(context: Context): String {
         return try {
-            val logFile = File(context.filesDir, LOG_FILE_NAME)
+            val logFile = File(context.filesDir, getLogFileName())
             if (logFile.exists()) logFile.readText() else "ログファイルはまだありません。"
         } catch (e: Exception) {
             "ログの読み込みに失敗しました: ${e.message}"
@@ -52,7 +58,7 @@ object FileLogger {
      */
     fun clearLog(context: Context) {
         try {
-            val logFile = File(context.filesDir, LOG_FILE_NAME)
+            val logFile = File(context.filesDir, getLogFileName())
             if (logFile.exists()) {
                 logFile.delete()
             }

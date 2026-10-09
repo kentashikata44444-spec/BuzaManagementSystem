@@ -31,12 +31,23 @@ import com.example.buzaimanagementsystem.ui.theme.skl0101g01.SKL0101G01Screen
 import com.example.buzaimanagementsystem.ui.theme.skl0101g01.SKL0101G01ApiService
 import com.example.buzaimanagementsystem.ui.theme.skl0101g01.SKL0101G01ViewModel as SKL0101ViewModel
 
+// SKL0104G01（仕分け：鈴鹿支給品現品確定画面）関連
+import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01Screen
+import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01ApiService
+import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01ViewModel as SKL0104ViewModel
+
 import com.example.buzaimanagementsystem.utils.CommonApiService
 import com.example.buzaimanagementsystem.utils.FileLogger
 import com.example.buzaimanagementsystem.utils.performLogoutAndExit
 
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.HttpException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+
+import com.example.buzaimanagementsystem.BuildConfig
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -44,9 +55,6 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "MainActivity"
     }
 
-    /**
-     * 内部共通ログ出力用（Logcat ＆ テキストファイルへ同時出力）
-     */
     private fun writeLog(level: String, message: String, throwable: Throwable? = null) {
         when (level) {
             "D" -> {
@@ -72,16 +80,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         writeLog("D", "onCreate: MainActivity が起動しました")
 
-        // Retrofit共通設定
+        val serverUrl = BuildConfig.SERVER_URL
+        writeLog("I", "onCreate: 設定された通信先サーバーURL (BuildConfig.SERVER_URL) = $serverUrl")
+
         val retrofit = Retrofit.Builder()
-            .baseUrl(BuildConfig.SERVER_URL)
+            .baseUrl(serverUrl)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
         val apiService = retrofit.create(SKL0001G01ApiService::class.java)
         val commonApiService = retrofit.create(CommonApiService::class.java)
 
-        // ログイン画面用ViewModelの生成
         val viewModel = SKL0001G01ViewModel(application, apiService)
 
         setContent {
@@ -92,24 +101,24 @@ class MainActivity : ComponentActivity() {
                 ) {
                     var currentScreen by remember { mutableStateOf("login") }
 
-                    // セッション保持用パラメータ
                     var loginUserCd by remember { mutableStateOf("") }
                     var loginUserName by remember { mutableStateOf("") }
                     var gymTntCd by remember { mutableStateOf("") }
                     var gymTntMei by remember { mutableStateOf("") }
                     var selectedSourceDiv by remember { mutableStateOf("1") }
 
-                    // 画面状態に応じたルーティング
+                    // SKL0101から引き継ぐ選択値用の状態
+                    var selectedChubunruiCode by remember { mutableStateOf("") }
+                    var selectedChubunruiName by remember { mutableStateOf("") }
+                    var selectedShobunruiCode by remember { mutableStateOf("") }
+                    var selectedShobunruiName by remember { mutableStateOf("") }
+
                     when (currentScreen) {
                         "login" -> {
                             SKL0001G01Screen(
                                 viewModel = viewModel,
-                                onCloseApp = {
-                                    writeLog("I", "ログイン画面からアプリを終了します")
-                                    finish()
-                                },
+                                onCloseApp = { finish() },
                                 onLoginSuccess = { userCd, userName, tntCd, tntMei ->
-                                    writeLog("I", "ログイン成功: userCd=$userCd, name=$userName, 業務担当=($tntCd:$tntMei)")
                                     loginUserCd = userCd
                                     loginUserName = userName
                                     gymTntCd = tntCd
@@ -140,22 +149,18 @@ class MainActivity : ComponentActivity() {
                                 gymTntCd = gymTntCd,
                                 gymTntMei = gymTntMei,
                                 onNavigateToShiwake = { _, _, _ ->
-                                    writeLog("D", "メニュー -> 仕分けメニュー画面へ遷移します")
                                     currentScreen = "shiwake_menu"
                                 },
-                                onNavigateToShuyaku = { writeLog("D", "集約画面は未実装です") },
-                                onNavigateToHikiwatashi = { writeLog("D", "引渡し画面は未実装です") },
-                                onNavigateToHenkyaku = { writeLog("D", "返却品処理画面は未実装です") },
-                                onNavigateToKobetsu = { writeLog("D", "その他個別作業画面は未実装です") },
+                                onNavigateToShuyaku = {},
+                                onNavigateToHikiwatashi = {},
+                                onNavigateToHenkyaku = {},
+                                onNavigateToKobetsu = {},
                                 onExitApp = {
-                                    writeLog("I", "ログアウトおよびアプリ終了処理を実行します")
                                     performLogoutAndExit(
                                         coroutineScope = lifecycleScope,
                                         apiService = commonApiService,
                                         userCd = viewModel.loggedInUserCd,
-                                        onExit = {
-                                            finish()
-                                        }
+                                        onExit = { finish() }
                                     )
                                 }
                             )
@@ -169,21 +174,17 @@ class MainActivity : ComponentActivity() {
                                 gymTntCd = gymTntCd,
                                 gymTntMei = gymTntMei,
                                 onNavigateToMain = { _, _, _ ->
-                                    writeLog("D", "仕分けメニュー -> メインメニュー画面へ戻ります")
                                     currentScreen = "menu"
                                 },
                                 onNavigateToKobeTsukuba = { _, _, _, sourceDiv ->
-                                    writeLog("D", "仕分けメニュー(神戸・つくば) -> 仕分け処理画面へ遷移 (sourceDiv=$sourceDiv)")
                                     selectedSourceDiv = sourceDiv
                                     currentScreen = "shiwake"
                                 },
                                 onNavigateToSuzuka = { _, _, _, sourceDiv ->
-                                    writeLog("D", "仕分けメニュー(鈴鹿) -> 仕分け処理画面へ遷移 (sourceDiv=$sourceDiv)")
                                     selectedSourceDiv = sourceDiv
                                     currentScreen = "shiwake"
                                 },
                                 onNavigateToKatsueiWarehouse = { _, _, _, sourceDiv ->
-                                    writeLog("D", "仕分けメニュー(勝営倉庫) -> 仕分け処理画面へ遷移 (sourceDiv=$sourceDiv)")
                                     selectedSourceDiv = sourceDiv
                                     currentScreen = "shiwake"
                                 }
@@ -191,38 +192,65 @@ class MainActivity : ComponentActivity() {
                         }
 
                         "shiwake" -> {
-                            val skl0101ApiService = retrofit.create(SKL0101G01ApiService::class.java)
-                            // ▼ application を渡すように修正
-                            val skl0101ViewModel = remember { SKL0101ViewModel(application, skl0101ApiService) }
+                            var subScreen by remember { mutableStateOf("scan") }
 
-                            SKL0101G01Screen(
-                                viewModel = skl0101ViewModel,
-                                userCd = loginUserCd,
-                                gymTntCd = gymTntCd,
-                                gymTntMei = gymTntMei,
-                                sourceDivision = selectedSourceDiv,
-                                onNavigateToMain = { _, _, _ ->
-                                    writeLog("D", "仕分け画面 -> メインメニュー画面へ戻ります")
-                                    currentScreen = "menu"
-                                },
-                                onNavigateToMenu = { _, _, _ ->
-                                    writeLog("D", "仕分け画面 -> 仕分けメニュー画面へ戻ります")
-                                    currentScreen = "shiwake_menu"
-                                },
-                                onNavigateToShitei = { _, _, _, _, _, _, _, _ ->
-                                    writeLog("D", "仕分け画面 -> 指定画面へ遷移します")
-                                    // 次画面への遷移処理
+                            if (subScreen == "skl0104") {
+                                val skl0104ApiService = retrofit.create(SKL0104G01ApiService::class.java)
+                                val skl0104ViewModel = remember {
+                                    SKL0104ViewModel(application, skl0104ApiService).apply {
+                                        setInitialSelection(
+                                            selectedChubunruiCode,
+                                            selectedChubunruiName,
+                                            selectedShobunruiCode,
+                                            selectedShobunruiName
+                                        )
+                                    }
                                 }
-                            )
+
+                                SKL0104G01Screen(
+                                    viewModel = skl0104ViewModel,
+                                    userCd = loginUserCd,
+                                    gymTntCd = gymTntCd,
+                                    gymTntMei = gymTntMei,
+                                    sourceDivision = selectedSourceDiv,
+                                    onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
+                                    onNavigateToMenu = { _, _, _ -> currentScreen = "shiwake_menu" },
+                                    onNavigateToChange = { _, _, _ -> },
+                                    onNavigateToTemporary = { _, _, _ -> },
+                                    onNavigateToEmergency = { _, _, _ -> }
+                                )
+                            } else {
+                                val skl0101ApiService = retrofit.create(SKL0101G01ApiService::class.java)
+                                val skl0101ViewModel = remember { SKL0101ViewModel(application, skl0101ApiService) }
+
+                                SKL0101G01Screen(
+                                    viewModel = skl0101ViewModel,
+                                    userCd = loginUserCd,
+                                    gymTntCd = gymTntCd,
+                                    gymTntMei = gymTntMei,
+                                    sourceDivision = selectedSourceDiv,
+                                    onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
+                                    onNavigateToMenu = { _, _, _ -> currentScreen = "shiwake_menu" },
+                                    onNavigateToShitei = { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
+                                        writeLog("D", "仕分け画面 -> 次の画面へ遷移 (sourceDiv=$sDiv, cCode=$cCode, sCode=$sCode)")
+                                        selectedSourceDiv = sDiv
+                                        selectedChubunruiCode = cCode
+                                        selectedChubunruiName = cName
+                                        selectedShobunruiCode = sCode
+                                        selectedShobunruiName = sName
+
+                                        if (sDiv == "2") {
+                                            subScreen = "skl0104"
+                                        } else {
+                                            // TODO: 区分1や3の場合の遷移処理
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        writeLog("D", "onDestroy: MainActivity が破棄されました")
     }
 }

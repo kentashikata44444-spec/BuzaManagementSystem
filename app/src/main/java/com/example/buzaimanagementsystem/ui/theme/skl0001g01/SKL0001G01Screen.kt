@@ -75,18 +75,19 @@ fun SKL0001G01Screen(
 
                             val currentTime = System.currentTimeMillis()
 
-                            // ▼ 同じテキストかつ、前回のスキャンから3秒以内の場合は連続読み込みとみなして無視する
                             if (scannedText == lastScannedText && (currentTime - lastScannedTime) < 3000) {
                                 return@OcrCameraView
                             }
 
-                            // 今回の読み取り情報を更新
                             lastScannedText = scannedText
                             lastScannedTime = currentTime
 
-                            // 生の読み取り文字列をそのままViewModelに渡す
+                            // ▼ ViewModel側と同様に "_" でスプリットしてユーザーID部分だけを抽出・画面に即時反映する
+                            val inputUser = scannedText.split("_", limit = 2)[0].trim()
+                            userCd = inputUser
+
+                            // ViewModelに渡してログイン処理
                             viewModel.executeLogin(scannedText) { uCd, userName, gymTntCd, gymTntMei ->
-                                userCd = uCd
                                 onLoginSuccess(uCd, userName, gymTntCd, gymTntMei)
                             }
                         }

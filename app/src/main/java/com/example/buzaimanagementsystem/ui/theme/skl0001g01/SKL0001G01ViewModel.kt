@@ -188,7 +188,7 @@ class SKL0001G01ViewModel(
         // ▼ 全角・半角スペース（空白文字）が含まれている場合は拒否する
         if (rawInput.any { it.isWhitespace() }) {
             writeLog("W", "executeLogin: 入力値にスペースが含まれているため拒否します")
-            errorMessage = "このQRコードは使用できません。"
+            errorMessage = "ユーザーが登録されていません \nユーザー登録してください"
             return
         }
 
