@@ -40,22 +40,21 @@ fun SKL0104G01Screen(
     gymTntCd: String,
     gymTntMei: String,
     sourceDivision: String = "1",
-    chuCode: String = "",       // 中分類コード
-    chuName: String = "",       // 中分類名称
-    shoCode: String = "",       // 小分類コード
-    shoName: String = "",       // 小分類名称
+    chuCode: String = "",
+    chuName: String = "",
+    shoCode: String = "",
+    shoName: String = "",
     onNavigateToMain: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
     onNavigateToMenu: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
-    onNavigateToChange: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
-    onNavigateToTemporary: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
+    // 保管BOX・保管資材変更（SKL0101G01へ遷移）: 4つの引数を期待
+    onNavigateToChange: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) -> Unit,
+    // 一時保管（SKL0111G01へ遷移）: 5つの引数を期待
+    onNavigateToTemporary: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String, seihinBango: String) -> Unit,
     onNavigateToEmergency: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit
 ) {
     val context = LocalContext.current
 
-    // 保管資材ヘルプモーダルの表示管理
     var showHelpDialog by remember { mutableStateOf(false) }
-
-    // カメラの起動状態（初期値は false：遷移時は起動させない）
     var isCameraActive by remember { mutableStateOf(false) }
 
     var hasCameraPermission by remember {
@@ -73,7 +72,6 @@ fun SKL0104G01Screen(
         }
     }
 
-    // === ★追加: Bluetooth権限（Android 12以降用）の管理 ===
     var hasBluetoothPermission by remember {
         mutableStateOf(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -92,9 +90,8 @@ fun SKL0104G01Screen(
     }
 
     LaunchedEffect(userCd, gymTntCd, gymTntMei, sourceDivision, chuCode, chuName, shoCode, shoName) {
-        FileLogger.writeLog(context, "DEBUG", TAG, "画面初期化パラメータ受信: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei, sourceDivision=$sourceDivision, chuCode=$chuCode, chuName=$chuName, shoCode=$shoCode, shoName=$shoName")
+        FileLogger.writeLog(context, "DEBUG", TAG, "画面初期化パラメータ受信")
 
-        // === ★追加: Android 12以降の場合は、画面起動時にBluetooth権限を要求する ===
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val needConnect = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
             val needScan = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED
@@ -108,25 +105,8 @@ fun SKL0104G01Screen(
             }
         }
 
-        // ViewModel側へ中分類・小分類パラメータを含む初期化値を渡す
         viewModel.initParams(userCd, gymTntCd, gymTntMei, sourceDivision, chuCode, chuName, shoCode, shoName)
-
-        // ② Config（設定ファイル）から保存されたBLE機器の初期値（アドレス）を取得・確認
-        val savedBleAddress = BluetoothConnectionHelper.getSavedBleDeviceAddress(context)
-        if (!savedBleAddress.isNullOrEmpty()) {
-            FileLogger.writeLog(context, "DEBUG", TAG, "保存されたBLEデバイスアドレスを検知: $savedBleAddress")
-        }
-
-        // ③ バーコードリーダ接続チェックの呼び出し
         viewModel.checkBarcodeReaderConnection(context)
-    }
-
-    // インフォメッセージ変更時のログ出力
-    LaunchedEffect(viewModel.infoMessage) {
-        viewModel.infoMessage?.let { message ->
-            FileLogger.writeLog(context, "INFO", TAG, "インフォメーション表示: $message")
-            Log.i(TAG, "インフォメーション表示: $message")
-        }
     }
 
     Surface(
@@ -138,7 +118,6 @@ fun SKL0104G01Screen(
                 .fillMaxSize()
                 .background(Color.White)
         ) {
-            // === カメラが有効かつ権限がある場合のみ裏で起動 ===
             if (isCameraActive && hasCameraPermission) {
                 Box(modifier = Modifier.size(1.dp)) {
                     OcrCameraView(
@@ -149,7 +128,6 @@ fun SKL0104G01Screen(
                 }
             }
 
-            // === メインコンテンツ（スクロール対応） ===
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -160,7 +138,7 @@ fun SKL0104G01Screen(
             ) {
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // 最上部：業務担当名（右寄せ）
+                // 業務担当名
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -176,14 +154,13 @@ fun SKL0104G01Screen(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // タイトル ＆ 下線
+                // タイトル
                 Column(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.width(IntrinsicSize.Max)
                 ) {
                     Text(
                         text = "仕分け(鈴鹿支給品現品確定)",
                         fontSize = 20.sp,
-                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,
                         maxLines = 1
@@ -199,7 +176,7 @@ fun SKL0104G01Screen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 上部アクション行（左：緊急表示エリア / 右：仕分け・一時保管メニュー）
+                // 上部アクション行
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -209,26 +186,35 @@ fun SKL0104G01Screen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
-                            .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                            .then(
+                                if (viewModel.isEmergency) {
+                                    Modifier
+                                        .background(Color.Red, shape = RoundedCornerShape(8.dp))
+                                        .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .padding(horizontal = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "緊急表示エリア",
-                            fontSize = 13.sp,
-                            color = Color.Gray,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1
-                        )
+                        if (viewModel.isEmergency) {
+                            Text(
+                                text = "緊急",
+                                fontSize = 16.sp,
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
+                    // ★ 仕分け・一時保管メニューボタン（登録件数0件のとき有効、1件以上で無効）[cite: 2]
                     Button(
-                        onClick = {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "仕分け・一時保管メニューボタン押下")
-                            onNavigateToMenu(userCd, gymTntCd, gymTntMei)
-                        },
+                        onClick = { onNavigateToMenu(userCd, gymTntCd, gymTntMei) },
+                        enabled = viewModel.isMenuEnabled,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
@@ -241,15 +227,19 @@ fun SKL0104G01Screen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // ボタン行（左：保管BOX・保管資材変更 / 右：一時保管(保管エリア確定)）
+                // ボタン行
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
                         onClick = {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "保管BOX・保管資材変更ボタン押下")
-                            onNavigateToChange(userCd, gymTntCd, gymTntMei)
+                            onNavigateToChange(
+                                gymTntCd,
+                                gymTntMei,
+                                userCd,
+                                sourceDivision
+                            )
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                         shape = RoundedCornerShape(8.dp),
@@ -261,11 +251,18 @@ fun SKL0104G01Screen(
                         Text(text = "保管BOX・保管資材変更", color = Color.Black, fontSize = 12.sp, maxLines = 1)
                     }
 
+                    // ★ 一時保管ボタン（登録件数が1件以上の場合に有効、ゼロ件は無効）[cite: 2]
                     Button(
                         onClick = {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "一時保管ボタン押下")
-                            onNavigateToTemporary(userCd, gymTntCd, gymTntMei)
+                            onNavigateToTemporary(
+                                userCd,
+                                gymTntCd,
+                                gymTntMei,
+                                sourceDivision,
+                                viewModel.seihinBango
+                            )
                         },
+                        enabled = viewModel.isTemporaryStorageEnabled,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
@@ -277,7 +274,7 @@ fun SKL0104G01Screen(
                     }
                 }
 
-                // メッセージ表示エリア
+                // エラーメッセージ
                 if (viewModel.errorMessage != null) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Box(
@@ -291,6 +288,7 @@ fun SKL0104G01Screen(
                     }
                 }
 
+                // インフォメッセージ
                 if (viewModel.infoMessage != null) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Box(
@@ -305,15 +303,8 @@ fun SKL0104G01Screen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val scanGuideMessage = when (sourceDivision) {
-                    "1" -> "※『保管BOX』または『保管資材』の\n    バーコードを読み込んでください"
-                    "2" -> "※『保管BOX』または『保管資材』の\n    QRを読み込んでください"
-                    "3" -> "※『保管BOX』または『保管資材』の\n    バーコードを読み込んでください"
-                    else -> "※『保管BOX』または『保管資材』の\n    バーコードを読み込んでください"
-                }
-
                 Text(
-                    text = scanGuideMessage,
+                    text = "『現品票』を読み込んでください",
                     fontSize = 12.sp,
                     color = Color.Black,
                     textAlign = TextAlign.Start
@@ -321,7 +312,7 @@ fun SKL0104G01Screen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 入力フィールド群
+                // --- 各入力フィールド ---
                 // 1. 保管BOX
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -488,16 +479,15 @@ fun SKL0104G01Screen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 下部アクションボタン群（登録・削除・緊急品集約・カメラ切替）
+                // 下部アクションボタン群（登録・削除）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    // ★ 登録ボタン（バリデーション成功時のみ有効）
                     Button(
-                        onClick = {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "登録ボタン押下")
-                            viewModel.executeRegister()
-                        },
+                        onClick = { viewModel.executeRegister() },
+                        enabled = viewModel.isRegisterEnabled,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
@@ -507,11 +497,10 @@ fun SKL0104G01Screen(
                         Text(text = "登録", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
 
+                    // ★ 削除ボタン（データ読込済みの場合有効）
                     Button(
-                        onClick = {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "削除ボタン押下")
-                            viewModel.executeDelete()
-                        },
+                        onClick = { viewModel.executeDelete() },
+                        enabled = viewModel.isDeleteEnabled,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
@@ -529,11 +518,10 @@ fun SKL0104G01Screen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // ★ 緊急品集約ボタン（緊急品表示が有りの場合のみ有効）[cite: 2]
                     Button(
-                        onClick = {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "緊急品集約ボタン押下")
-                            onNavigateToEmergency(userCd, gymTntCd, gymTntMei)
-                        },
+                        onClick = { onNavigateToEmergency(userCd, gymTntCd, gymTntMei) },
+                        enabled = viewModel.isEmergencyButtonEnabled,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
@@ -543,14 +531,12 @@ fun SKL0104G01Screen(
                         Text(text = "緊急品集約", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    // カメラ起動 / 停止の切り替えボタン
                     Button(
                         onClick = {
                             if (!hasCameraPermission) {
                                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                             } else {
                                 isCameraActive = !isCameraActive
-                                FileLogger.writeLog(context, "DEBUG", TAG, if (isCameraActive) "カメラ起動ボタン押下" else "カメラ停止ボタン押下")
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
@@ -571,68 +557,102 @@ fun SKL0104G01Screen(
 
                 Spacer(modifier = Modifier.height(32.dp))
             }
-        }
 
-        // === 保管資材説明モーダル（AlertDialog） ===
-        if (showHelpDialog) {
-            AlertDialog(
-                onDismissRequest = { showHelpDialog = false },
-                containerColor = Color.White,
-                shape = RoundedCornerShape(8.dp),
-                title = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "保管資材", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                        Button(
-                            onClick = { showHelpDialog = false },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+            // === 保管資材説明モーダル（AlertDialog）をBox内の最背面/最前面（Columnの外側の末尾）に配置 ===
+            if (showHelpDialog) {
+                AlertDialog(
+                    onDismissRequest = { showHelpDialog = false },
+                    containerColor = Color.White,
+                    shape = RoundedCornerShape(8.dp),
+                    title = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "閉じる", color = Color.Black, fontSize = 14.sp)
-                        }
-                    }
-                },
-                text = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(450.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "コンビテナ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Image(painter = painterResource(id = R.drawable.conbitena), contentDescription = "コンビテナ", modifier = Modifier.size(150.dp))
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "パレット", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Image(painter = painterResource(id = R.drawable.palette), contentDescription = "パレット", modifier = Modifier.size(150.dp))
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Image(painter = painterResource(id = R.drawable.daisha1), contentDescription = "台車1", modifier = Modifier.size(120.dp))
-                                Image(painter = painterResource(id = R.drawable.daisha2), contentDescription = "台車2", modifier = Modifier.size(120.dp))
+                            Text(
+                                text = "保管資材",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                            Button(
+                                onClick = { showHelpDialog = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                            ) {
+                                Text(text = "閉じる", color = Color.Black, fontSize = 14.sp)
                             }
                         }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Image(painter = painterResource(id = R.drawable.tana), contentDescription = "棚", modifier = Modifier.size(150.dp))
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(450.dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // コンビテナ
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "コンビテナ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.conbitena),
+                                    contentDescription = "コンビテナ",
+                                    modifier = Modifier.size(150.dp)
+                                )
+                            }
+
+                            // パレット
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "パレット", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.palette),
+                                    contentDescription = "パレット",
+                                    modifier = Modifier.size(150.dp)
+                                )
+                            }
+
+                            // 台車
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.daisha1),
+                                        contentDescription = "台車1",
+                                        modifier = Modifier.size(120.dp)
+                                    )
+                                    Image(
+                                        painter = painterResource(id = R.drawable.daisha2),
+                                        contentDescription = "台車2",
+                                        modifier = Modifier.size(120.dp)
+                                    )
+                                }
+                            }
+
+                            // 棚
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.tana),
+                                    contentDescription = "棚",
+                                    modifier = Modifier.size(150.dp)
+                                )
+                            }
                         }
-                    }
-                },
-                confirmButton = {}
-            )
+                    },
+                    confirmButton = {}
+                )
+            }
         }
     }
 }

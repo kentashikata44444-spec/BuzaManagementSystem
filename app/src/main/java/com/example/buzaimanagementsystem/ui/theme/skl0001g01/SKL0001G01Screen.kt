@@ -2,6 +2,7 @@ package com.example.buzaimanagementsystem.ui.theme.skl0001g01
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -19,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-
 import com.example.buzaimanagementsystem.OcrCameraView
 
 @Composable
@@ -32,28 +32,40 @@ fun SKL0001G01Screen(
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
-    // ▼ 同じQRコードの連続読み込みを防ぐための変数（最後に読んだテキストと、その時刻）
     var lastScannedText by remember { mutableStateOf<String?>(null) }
     var lastScannedTime by remember { mutableStateOf(0L) }
 
-    // カメラ権限が許可されているかどうかの状態
-    var hasCameraPermission by remember {
+    // Android 12以降の判定と必要な権限リストの作成
+    val isAndroid12Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val requiredPermissions = remember {
+        mutableListOf(Manifest.permission.CAMERA).apply {
+            if (isAndroid12Plus) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }.toTypedArray()
+    }
+
+    // すべての権限が許可されているかチェック
+    var hasAllPermissions by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            requiredPermissions.all {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            }
         )
     }
 
-    // カメラの実行時権限をリクエストするランチャー
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasCameraPermission = isGranted
+    // 複数権限を同時にリクエストするランチャー
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasAllPermissions = permissions.values.all { it }
     }
 
     LaunchedEffect(Unit) {
         viewModel.checkSystemAvailability()
-        if (!hasCameraPermission) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        if (!hasAllPermissions) {
+            permissionLauncher.launch(requiredPermissions)
         }
     }
 
@@ -64,17 +76,14 @@ fun SKL0001G01Screen(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            // === ① 裏で常にカメラを起動しておく ===
-            if (hasCameraPermission && viewModel.isSystemAvailable) {
-                Box(
-                    modifier = Modifier.size(1.dp) // ほぼ見えないサイズで常時バックグラウンド稼働
-                ) {
+            // すべての権限（カメラ＋Bluetooth）が許可されている場合にカメラを起動
+            if (hasAllPermissions && viewModel.isSystemAvailable) {
+                Box(modifier = Modifier.size(1.dp)) {
                     OcrCameraView(
                         onTextScanned = { scannedText ->
                             if (!viewModel.isSystemAvailable || viewModel.isLoggingIn) return@OcrCameraView
 
                             val currentTime = System.currentTimeMillis()
-
                             if (scannedText == lastScannedText && (currentTime - lastScannedTime) < 3000) {
                                 return@OcrCameraView
                             }
@@ -82,11 +91,9 @@ fun SKL0001G01Screen(
                             lastScannedText = scannedText
                             lastScannedTime = currentTime
 
-                            // ▼ ViewModel側と同様に "_" でスプリットしてユーザーID部分だけを抽出・画面に即時反映する
                             val inputUser = scannedText.split("_", limit = 2)[0].trim()
                             userCd = inputUser
 
-                            // ViewModelに渡してログイン処理
                             viewModel.executeLogin(scannedText) { uCd, userName, gymTntCd, gymTntMei ->
                                 onLoginSuccess(uCd, userName, gymTntCd, gymTntMei)
                             }
@@ -95,7 +102,6 @@ fun SKL0001G01Screen(
                 }
             }
 
-            // === ② 通常のログイン画面UI ===
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -104,7 +110,6 @@ fun SKL0001G01Screen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // タイトル
                 Text(
                     text = "部材所在管理システム",
                     fontSize = 24.sp,
@@ -112,7 +117,6 @@ fun SKL0001G01Screen(
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
 
-                // メッセージボックス
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -128,7 +132,6 @@ fun SKL0001G01Screen(
                     )
                 }
 
-                // ユーザーID入力欄
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -136,13 +139,8 @@ fun SKL0001G01Screen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = "ユーザーID",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 16.dp)
-                    )
+                    Text(text = "ユーザーID", fontSize = 16.sp, modifier = Modifier.padding(end = 16.dp))
 
-                    // バーコード読込結果表示用のBox
                     Box(
                         modifier = Modifier
                             .width(200.dp)
@@ -161,12 +159,9 @@ fun SKL0001G01Screen(
                     }
                 }
 
-                // 閉じるボタン
                 Button(
                     onClick = onCloseApp,
-                    modifier = Modifier
-                        .width(130.dp)
-                        .height(48.dp),
+                    modifier = Modifier.width(130.dp).height(48.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(text = "閉じる", fontSize = 16.sp)
@@ -174,20 +169,12 @@ fun SKL0001G01Screen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 利用可能時間
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "利用可能時間",
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(end = 16.dp)
-                    )
-                    Text(
-                        text = viewModel.displayTime,
-                        fontSize = 20.sp
-                    )
+                    Text(text = "利用可能時間", fontSize = 20.sp, modifier = Modifier.padding(end = 16.dp))
+                    Text(text = viewModel.displayTime, fontSize = 20.sp)
                 }
             }
         }

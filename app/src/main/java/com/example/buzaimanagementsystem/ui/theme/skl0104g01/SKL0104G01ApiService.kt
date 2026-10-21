@@ -1,6 +1,5 @@
 package com.example.buzaimanagementsystem.ui.theme.skl0104g01
 
-import com.google.gson.annotations.SerializedName
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -14,35 +13,25 @@ interface SKL0104G01ApiService {
         @Query("seihinBango") seihinBango: String
     ): Response<EmergencyCheckResponse>
 
+    @GET("api/skl0104/buhinhyo-info")
+    suspend fun getBuhinHyoInfo(
+        @Query("seihinBango") seihinBango: String?,
+        @Query("buhinKanriNo") buhinKanriNo: String?,
+        @Query("hinban") hinban: String?
+    ): Response<BuhinHyoResponse>
+
+    @GET("api/skl0104/hokanbox-siyo")
+    suspend fun checkHokanBoxSiyo(
+        @Query("hokanBoxCd") hokanBoxCd: String
+    ): Response<HokanBoxSiyoResponse>
+
     @POST("api/skl0104/delete")
     suspend fun deleteData(
         @Body request: DeleteRequestModel
     ): Response<DeleteResponse>
+
+    @POST("api/skl0104/register")
+    suspend fun registerData(
+        @Body request: RegisterRequestModel
+    ): Response<RegisterResponse>
 }
-
-data class EmergencyCheckResponse(
-    @SerializedName(value = "KINKYU", alternate = ["kinkyu", "Kinkyu"])
-    val kinkyu: String?
-)
-
-data class DeleteRequestModel(
-    @SerializedName(value = "GENPKANRIBANGO", alternate = ["genpkanribango", "Genpkanribango"])
-    val genpkanribango: String,
-
-    @SerializedName(value = "SEIHINBANGO", alternate = ["seihinBango", "SeihinBango"])
-    val seihinBango: String,
-
-    @SerializedName(value = "HOKANBOXCD", alternate = ["hokanBoxCd", "HokanBoxCd"])
-    val hokanBoxCd: String,
-
-    @SerializedName(value = "HOKANSIZAICD", alternate = ["hokanShizaiCd", "HokanShizaiCd"])
-    val hokanShizaiCd: String,
-
-    @SerializedName(value = "HASDETAILDATA", alternate = ["hasDetailData", "HasDetailData"])
-    val hasDetailData: Boolean
-)
-
-data class DeleteResponse(
-    @SerializedName(value = "SUCCESS", alternate = ["success", "Success"])
-    val success: Boolean
-)

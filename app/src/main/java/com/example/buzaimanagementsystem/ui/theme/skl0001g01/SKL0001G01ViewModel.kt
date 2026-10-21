@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.buzaimanagementsystem.utils.AppConfig
+import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import com.example.buzaimanagementsystem.utils.FileLogger
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -29,17 +31,12 @@ class SKL0001G01ViewModel(
     var isSystemAvailable by mutableStateOf(true)
         private set
 
-    // ログイン成功したユーザーコードを保持するプロパティ
     var loggedInUserCd by mutableStateOf("")
         private set
 
-    // ログイン処理中の二重実行・ループを防ぐためのフラグ
     var isLoggingIn by mutableStateOf(false)
         private set
 
-    /**
-     * 内部共通ログ出力用（Logcat ＆ テキストファイルへ同時出力）
-     */
     private fun writeLog(level: String, message: String, throwable: Throwable? = null) {
         val context = getApplication<Application>()
         when (level) {
@@ -62,16 +59,65 @@ class SKL0001G01ViewModel(
         }
     }
 
-    /**
-     * システムの稼働状況および稼働時間をチェックする
-     */
     fun checkSystemAvailability() {
-        writeLog("D", "checkSystemAvailability: システム稼働状況の確認を開始します")
+        data class ResolvedReader(val mac: String, val name: String)
+        writeLog("D", "checkSystemAvailability: システム稼働状況およびバーコードリーダーの自動紐づけを確認します")
+
+        val context = getApplication<Application>()
+
+        // ▼ 初回起動時や未設定時に、APIからマスタ一覧を取得してAppConfigの設定値（MAC or 銘称）と自動照合・紐づけを行う
+        if (!AppConfig.hasSavedDevice(context)) {
+            viewModelScope.launch {
+                try {
+                    val readerList = apiService.getBarcodeReaderList()
+                    if (readerList.isNotEmpty()) {
+                        // AppConfigに事前定義されている、あるいは端末に紐づく設定値（例: 固定の指定銘称やMAC）を取得
+                        // ※ ここではConfigまたは環境等で保持している「期待するデバイス情報」と照合します
+                        val configuredMac = AppConfig.getSavedBleDeviceAddress(context) // 必要に応じて個別の設定値メソッドに変更可能
+
+                        val matchedReader = readerList.find { reader ->
+                            val mac = reader.MAC_ADS?.trim()?.uppercase()
+                            val name = reader.MEISHO?.trim() ?: reader.HOZON_NM?.trim()
+
+                            // MACアドレスまたは銘称（MEISHO / HOZON_NM）でテーブルと照合
+                            (!configuredMac.isNullOrBlank() && mac == configuredMac.uppercase()) ||
+                                    (name == AppConfig.getConfiguredDeviceMeisho(context))
+                        } ?: readerList.firstOrNull() // 一致するものがない場合はデフォルトとして先頭を割り当てる、またはエラーにする
+
+                        if (matchedReader != null) {
+                            val rawMac = matchedReader.MAC_ADS?.trim()
+                            if (!rawMac.isNullOrBlank()) {
+                                val formattedMac = if (!rawMac.contains(":") && rawMac.length == 12) {
+                                    rawMac.chunked(2).joinToString(":")
+                                } else {
+                                    rawMac
+                                }.uppercase()
+
+                                AppConfig.saveBleDeviceAddress(context, formattedMac, matchedReader.HOZON_NM ?: "")
+                                writeLog("I", "テーブル照合によりバーコードリーダーが自動紐づけされました: ${matchedReader.HOZON_NM} ($formattedMac)")
+
+                                // 自動接続の開始
+                                BluetoothConnectionHelper.connectToSavedDevice(
+                                    context = context,
+                                    onConnectionStateChanged = { isConnected, address ->
+                                        writeLog("I", "自動紐づけ時接続コールバック: isConnected=$isConnected, address=$address")
+                                    },
+                                    onDetailedError = { _ ->
+                                        writeLog("W", "自動紐づけ時BLE接続エラー（ハードウェア異常）")
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    writeLog("E", "バーコードリーダーマスタの自動照合に失敗しました", e)
+                }
+            }
+        }
+
         viewModelScope.launch {
             try {
                 val response = apiService.getConditions()
-
-                // まずは稼働時間を先に取得して表示用文字列（displayTime）を確定させる
                 val timeData = response.operationTime
                 if (timeData != null && !timeData.suji1.isNullOrBlank() && !timeData.suji2.isNullOrBlank()) {
                     fun parseHour(value: Any?): Int? {
@@ -90,119 +136,57 @@ class SKL0001G01ViewModel(
                     }
                 }
 
-                // 次に稼働フラグのチェックを行う
-                if (response.operationFlag.isNullOrBlank()) {
-                    writeLog("W", "checkSystemAvailability: 稼働フラグが取得できませんでした")
-                    isSystemAvailable = false
-                    errorMessage = "稼働フラグの取得に失敗しました \nシステム管理者に問合せ願います"
-                    return@launch
-                }
-
-                val isRunning = response.operationFlag.trim().equals("OK", ignoreCase = true)
-                if (!isRunning) {
-                    writeLog("W", "checkSystemAvailability: 非稼働日のため利用不可 (operationFlag=${response.operationFlag})")
+                if (response.operationFlag.isNullOrBlank() || !response.operationFlag.trim().equals("OK", ignoreCase = true)) {
                     isSystemAvailable = false
                     errorMessage = "非稼働日の為、利用できません"
                     return@launch
                 }
 
                 if (timeData == null || timeData.suji1.isNullOrBlank() || timeData.suji2.isNullOrBlank()) {
-                    writeLog("W", "checkSystemAvailability: 稼働時間のデータが不正です")
                     isSystemAvailable = false
-                    errorMessage = "稼働時間の取得に失敗しました \nシステム管理者に問合せ願います"
+                    errorMessage = "稼働時間の取得に失敗しました"
                     return@launch
                 }
 
-                fun parseHour(value: Any?): Int? {
-                    return when (value) {
-                        is Number -> value.toInt()
-                        is String -> value.toIntOrNull()
-                        else -> value?.toString()?.toIntOrNull()
-                    }
-                }
-
-                val startHour = parseHour(timeData.suji1)
-                val endHour = parseHour(timeData.suji2)
+                val startHour = timeData.suji1.toString().toIntOrNull()
+                val endHour = timeData.suji2.toString().toIntOrNull()
 
                 if (startHour != null && endHour != null) {
                     val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-
                     val allowed = if (startHour <= endHour) {
                         currentHour in startHour until endHour
                     } else {
                         currentHour >= startHour || currentHour < endHour
                     }
 
-                    writeLog("D", "checkSystemAvailability: 設定時間=$displayTime, 現在の時刻(時)=$currentHour, 判定=$allowed")
-
                     if (!allowed) {
                         isSystemAvailable = false
                         errorMessage = "稼働時間外の為、利用できません"
-                        return@launch
                     }
-                } else {
-                    writeLog("W", "checkSystemAvailability: 開始・終了時間のパースに失敗しました")
-                    isSystemAvailable = false
-                    errorMessage = "稼働時間の取得に失敗しました \nシステム管理者に問合せ願います"
-                    return@launch
                 }
-
-                writeLog("D", "checkSystemAvailability: システム稼働チェック完了（利用可能）")
-
             } catch (e: Exception) {
                 isSystemAvailable = false
-                writeLog("E", "checkSystemAvailability: 稼働状況チェック時のDB接続エラーが発生しました", e)
+                writeLog("E", "checkSystemAvailability: 接続エラー", e)
                 errorMessage = "ＤＢ接続に失敗しました \nシステム管理者に問合せ願います"
             }
         }
     }
 
-    /**
-     * ログイン処理を実行する
-     */
     fun executeLogin(inputText: String, onSuccess: (userCd: String, userName: String, gymTntCd: String, gymTntMei: String) -> Unit) {
-        // すでにログイン処理中の場合は重複リクエストをブロック
-        if (isLoggingIn) {
-            writeLog("W", "executeLogin: 既にログイン処理中のため、リクエストをスキップします")
-            return
-        }
-
-        writeLog("D", "executeLogin: ログイン処理を開始します (入力長: ${inputText.length})")
-
-        // システム利用不可（非稼働日・時間外）の場合は処理をブロック
+        if (isLoggingIn) return
         if (!isSystemAvailable) {
-            writeLog("W", "executeLogin: システム利用不可のためログインをブロックしました")
-            if (errorMessage.isNullOrBlank()) {
-                errorMessage = "現在システムはご利用いただけません。"
-            }
+            if (errorMessage.isNullOrBlank()) errorMessage = "現在システムはご利用いただけません。"
             return
         }
 
-        val rawInput = inputText
-        if (rawInput.isBlank()) {
-            writeLog("W", "executeLogin: 入力文字列が空です")
-            errorMessage = "ユーザーIDを入力してください。"
-            return
-        }
-
-        // ▼ 全角・半角スペース（空白文字）が含まれている場合は拒否する
-        if (rawInput.any { it.isWhitespace() }) {
-            writeLog("W", "executeLogin: 入力値にスペースが含まれているため拒否します")
+        val inputUser = inputText.split("_", limit = 2)[0].trim()
+        if (inputUser.isBlank() || inputText.any { it.isWhitespace() }) {
             errorMessage = "ユーザーが登録されていません \nユーザー登録してください"
             return
         }
 
-        val inputUser = rawInput.split("_", limit = 2)[0].trim()
-
-        if (inputUser.isBlank()) {
-            writeLog("W", "executeLogin: パース後のユーザーIDが空です")
-            errorMessage = "ユーザーIDが正しくありません。"
-            return
-        }
-
-        // 処理開始：フラグをONにする
         isLoggingIn = true
-        errorMessage = null // ログイン試行時は一度エラーメッセージをクリア
+        errorMessage = null
 
         viewModelScope.launch {
             try {
@@ -214,37 +198,26 @@ class SKL0001G01ViewModel(
                     bushoName = ""
                 )
 
-                writeLog("D", "executeLogin: APIへログインリクエスト送信 (userCd=$inputUser)")
                 val response = apiService.login(request)
-
                 if (response.success) {
                     val name = response.data?.userName?.takeIf { it.isNotBlank() } ?: inputUser
                     val tntCd = response.data?.gymTntCd ?: ""
                     val tntMei = response.data?.gymTntMei ?: ""
 
-                    // 業務担当マスタの取得チェック
                     if (tntCd.isBlank() || tntMei.isBlank()) {
-                        writeLog("W", "executeLogin: 業務担当マスタの取得に失敗しました（データ不備） (userCd=$inputUser)")
-                        errorMessage = "業務担当マスタの取得に失敗しました \nシステム管理者に問合せ願います"
+                        errorMessage = "業務担当マスタの取得に失敗しました"
                         isLoggingIn = false
                         return@launch
                     }
 
                     loggedInUserCd = inputUser
-                    writeLog("I", "executeLogin: ログイン成功 (userCd=$inputUser, name=$name, 業務担当=($tntCd:$tntMei))")
-
                     onSuccess(inputUser, name, tntCd, tntMei)
                 } else {
-                    // サーバー側で「すでにログイン中」などのビジネスロジックエラー
-                    writeLog("W", "executeLogin: ログイン失敗（サーバー判定）: ${response.message} (userCd=$inputUser)")
                     errorMessage = response.message ?: "ログインに失敗しました。"
                     isLoggingIn = false
                 }
-
             } catch (e: Exception) {
-                // 通信エラーや予期せぬシステム例外
-                writeLog("E", "executeLogin: ログイン処理中の通信・システムエラーが発生しました (userCd=$inputUser)", e)
-                errorMessage = "通信エラー、またはシステムエラーが発生しました。\n(${e.message})"
+                errorMessage = "通信エラー、またはシステムエラーが発生しました。"
                 isLoggingIn = false
             }
         }

@@ -9,7 +9,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import com.example.buzaimanagementsystem.utils.FileLogger
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class SKL0104G01ViewModel(
@@ -30,12 +29,17 @@ class SKL0104G01ViewModel(
     var sourceDivision by mutableStateOf("1")
         private set
 
-    // 入力・スキャン項目
+    // API送信用の4つの変数
     var hokanBoxCode by mutableStateOf("")
+        private set
+    var hokanBoxMeisho by mutableStateOf("")
         private set
     var hokanShizaiCode by mutableStateOf("")
         private set
+    var hokanShizaiMeisho by mutableStateOf("")
+        private set
 
+    // 画面側（SKL0104G01Screen）が参照している分類変数（UIとの同期用）
     var chubunruiCode by mutableStateOf("")
         private set
     var chubunruiMeisho by mutableStateOf("")
@@ -49,9 +53,24 @@ class SKL0104G01ViewModel(
         private set
     var denpyoBango by mutableStateOf("")
         private set
-    var shikyuYoteiSu by mutableStateOf("")
+    var buhinKanriNo by mutableStateOf("")
         private set
-    var konkaiShikyuSu by mutableStateOf("")
+    var hinban by mutableStateOf("")
+        private set
+
+    // スキャンされたQRコードの種類に基づく伝票種別コードを保持（デフォルトは "03"）
+    var scannedDenpyoShubetsu by mutableStateOf("03")
+        private set
+
+    var shikyuYoteiSu by mutableStateOf("0")
+        private set
+    var konkaiShikyuSu by mutableStateOf("0")
+        private set
+
+    var tehaiSu by mutableStateOf(0.0)
+        private set
+
+    var isEmergency by mutableStateOf(false)
         private set
 
     var errorMessage by mutableStateOf<String?>(null)
@@ -59,59 +78,85 @@ class SKL0104G01ViewModel(
     var infoMessage by mutableStateOf<String?>(null)
         private set
 
-    // BLEバーコードリーダーの接続状態を保持するフラグ
     var isBleDeviceConnected: Boolean = false
         private set
 
-    // 現在BLE接続処理（非同期）の真っ最中であるかを保持するフラグ
-    var isBleConnecting: Boolean = false
-        private set
-
-    // 前回保存されたBLEデバイスのアドレスを保持する変数
     var savedBleAddress by mutableStateOf<String?>(null)
         private set
 
-    /**
-     * 外部（BLE管理クラスやコールバック）から接続状態を変更されたときに呼ぶメソッド
-     */
+    // ==========================================
+    // ★ ボタン制御用の状態・判定プロパティ（詳細ログ付き）
+    // ==========================================
+    var registeredItemCount by mutableStateOf(0)
+        private set
+
+    var isDataLoadedForRegister by mutableStateOf(false)
+        private set
+
+    // 保管BOX・保管資材変更: 常に有効
+    val isChangeBoxOrMaterialEnabled: Boolean = true
+
+    // 保管資材説明: 常に有効
+    val isMaterialDescriptionEnabled: Boolean = true
+
+    // 一時保管（保管エリア確定）: 登録件数が1件以上の場合は有効、ゼロ件は無効
+    val isTemporaryStorageEnabled: Boolean
+        get() {
+            val enabled = registeredItemCount > 0
+            // 頻繁な評価ログが出すぎる場合はコメントアウトしてください
+            return enabled
+        }
+
+    // 緊急品集約: 緊急品表示が有りの場合は有効、無しの場合は無効
+    val isEmergencyButtonEnabled: Boolean
+        get() = isEmergency
+
+    // 削除: データが読み込まれている場合は有効
+    val isDeleteEnabled: Boolean
+        get() = seihinBango.isNotBlank() || denpyoBango.isNotBlank()
+
+    // 登録: データが正常に読み込まれ登録待ち状態の時は有効
+    val isRegisterEnabled: Boolean
+        get() = isDataLoadedForRegister
+
+    // 仕分け・一時保管メニュー: 登録件数がゼロ件の場合は有効、1件以上の場合は無効
+    val isMenuEnabled: Boolean
+        get() {
+            val enabled = registeredItemCount == 0
+            return enabled
+        }
+
+    // 読み取り: 常に有効
+    val isScanEnabled: Boolean = true
+    // ==========================================
+
     fun updateBleConnectionStatus(isConnected: Boolean, deviceAddress: String? = null) {
         isBleDeviceConnected = isConnected
-        isBleConnecting = false // 接続試行が完了したのでフラグを降ろす
         writeLog("I", "BLE接続状態が更新されました: isConnected=$isConnected, address=$deviceAddress")
 
         val context = getApplication<Application>()
 
-        // 接続に成功し、デバイスアドレスが取得できている場合はAppConfigに保存する
         if (isConnected && !deviceAddress.isNullOrEmpty()) {
             BluetoothConnectionHelper.saveBleDeviceAddress(context, deviceAddress)
             savedBleAddress = deviceAddress
-            writeLog("I", "BLEデバイスのアドレスをConfigに保存しました: $deviceAddress")
+            errorMessage = null
+            infoMessage = null
+        } else {
+            isBleDeviceConnected = false
+            errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
+            writeLog("W", "BLEデバイスが切断されました / ハードウェア異常")
         }
-
-        // 状態が変わったタイミングで再度接続チェックを走らせてメッセージを更新する
-        checkBarcodeReaderConnection(context)
     }
 
     private fun writeLog(level: String, message: String, throwable: Throwable? = null) {
         val context = getApplication<Application>()
         when (level) {
-            "D" -> {
-                Log.d(TAG, message, throwable)
-                FileLogger.writeLog(context, "DEBUG", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
-            }
-            "W" -> {
-                Log.w(TAG, message, throwable)
-                FileLogger.writeLog(context, "WARN", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
-            }
-            "E" -> {
-                Log.e(TAG, message, throwable)
-                FileLogger.writeLog(context, "ERROR", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
-            }
-            "I" -> {
-                Log.i(TAG, message, throwable)
-                FileLogger.writeLog(context, "INFO", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
-            }
+            "D" -> Log.d(TAG, message, throwable)
+            "W" -> Log.w(TAG, message, throwable)
+            "E" -> Log.e(TAG, message, throwable)
+            "I" -> Log.i(TAG, message, throwable)
         }
+        FileLogger.writeLog(context, level, TAG, message)
     }
 
     fun initParams(
@@ -124,139 +169,433 @@ class SKL0104G01ViewModel(
         shoCode: String = "",
         shoName: String = ""
     ) {
-        writeLog("D", "initParams: パラメータ初期化 (userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei, sourceDivision=$sourceDivision)")
         this.userCd = userCd
         this.gymTntCd = gymTntCd
         this.gymTntMei = gymTntMei
         this.sourceDivision = sourceDivision
 
-        if (chuCode.isNotEmpty()) hokanShizaiCode = chuCode
-        if (chuName.isNotEmpty()) chubunruiMeisho = chuName
-        if (shoCode.isNotEmpty()) hokanBoxCode = shoCode
-        if (shoName.isNotEmpty()) shobunruiMeisho = shoName
+        if (chuCode.isNotEmpty() || shoCode.isNotEmpty() || (hokanShizaiCode.isEmpty() && hokanBoxCode.isEmpty())) {
+            setInitialSelection(chuCode, chuName, shoCode, shoName)
+            writeLog("I", "initParams完了 -> ChuCode: '$chuCode', ChuName: '$chuName', ShoCode: '$shoCode', ShoName: '$shoName'")
+        } else {
+            writeLog("I", "initParamsスキップ（既存の選択値を保持） -> 現在の資材: '$hokanShizaiCode', BOX: '$hokanBoxCode'")
+        }
 
         val context = getApplication<Application>()
-
-        // 1. 保存済みのアドレスを変数に保持
         savedBleAddress = BluetoothConnectionHelper.getSavedBleDeviceAddress(context)
-        if (!savedBleAddress.isNullOrEmpty()) {
-            writeLog("I", "Configから保存済みBLEアドレスを読み込みました: $savedBleAddress")
+        if (savedBleAddress.isNullOrEmpty()) {
+            errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
+            return
+        }
 
-            // 2. すでにOS側で接続されている場合は接続処理をスルーする
-            if (BluetoothConnectionHelper.isBleConnected(context, savedBleAddress)) {
-                writeLog("I", "すでにBLEが接続されているため、接続試行をスキップします")
-                isBleDeviceConnected = true
-                checkBarcodeReaderConnection(context)
-                return
-            }
+        if (BluetoothConnectionHelper.isBleConnected(context, savedBleAddress)) {
+            isBleDeviceConnected = true
+            startConnectionMonitor(context)
+            connectBleWithDataListener(context)
+            return
+        }
 
-            // 3. 未接続の場合は、自動接続を1回だけ試みる
-            isBleConnecting = true
-            errorMessage = null // 接続開始時はエラーをクリア
-            infoMessage = "BLEバーコードリーダーに接続中..."
+        connectBleWithDataListener(context)
+    }
 
-            writeLog("I", "initParams: 500ms後にBLE自動接続コルーチンを開始します")
-
-            // 少し待機時間（500ms）を設けてから接続を試みる
-            viewModelScope.launch {
-                delay(500)
-                writeLog("I", "initParams: 500ms遅延完了。BluetoothConnectionHelper.connectToSavedDevice を呼び出します")
-
-                // 待機中にすでに接続が確立された場合はスルーする
-                if (BluetoothConnectionHelper.isBleConnected(context, savedBleAddress)) {
-                    writeLog("I", "initParams: 待機中にすでにBLE接続が確立されていました")
-                    isBleConnecting = false
-                    isBleDeviceConnected = true
-                    checkBarcodeReaderConnection(context)
-                    return@launch
-                }
-
-                BluetoothConnectionHelper.connectToSavedDevice(context) { isConnected, address ->
-                    writeLog("I", "BLE接続コールバックを受信しました: isConnected=$isConnected, address=$address")
+    private fun connectBleWithDataListener(context: android.content.Context) {
+        viewModelScope.launch {
+            BluetoothConnectionHelper.connectToSavedDevice(
+                context = context,
+                onConnectionStateChanged = { isConnected, address ->
                     updateBleConnectionStatus(isConnected, address)
+                    if (isConnected) startConnectionMonitor(context)
+                },
+                onDetailedError = { _ ->
+                    errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
+                    isBleDeviceConnected = false
+                },
+                onDataReceived = { scannedText ->
+                    writeLog("I", "BLEデータ受信コールバック発火: $scannedText")
+                    processScannedCode(scannedText)
                 }
-            }
-        } else {
-            writeLog("I", "Configに保存済みBLEアドレスが存在しません")
-            // 保存アドレスがない場合はそのまま通常のチェックを行う
-            checkBarcodeReaderConnection(context)
+            )
         }
     }
 
-    /**
-     * バーコードリーダー（BLE）およびBluetooth自体の接続状態をチェックする
-     */
+    private var monitorJob: kotlinx.coroutines.Job? = null
+
+    private fun startConnectionMonitor(context: android.content.Context) {
+        if (monitorJob?.isActive == true) return
+        monitorJob = viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(3000L)
+                val currentConnected = BluetoothConnectionHelper.isBleConnected(context, savedBleAddress)
+                if (isBleDeviceConnected && !currentConnected) {
+                    updateBleConnectionStatus(false, savedBleAddress)
+                    break
+                }
+            }
+        }
+    }
+
     fun checkBarcodeReaderConnection(context: android.content.Context) {
         if (!BluetoothConnectionHelper.isBluetoothEnabled()) {
-            errorMessage = "エラー: BluetoothがOFFになっています。ONにしてください。"
-            infoMessage = null // 片方を出す時は片方をクリア
-            writeLog("E", "BluetoothがOFFです")
+            errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
             return
         }
-
-        // 現在接続処理中であれば「接続中...」を表示し、エラーはクリアする
-        if (isBleConnecting) {
-            errorMessage = null
-            infoMessage = "BLEバーコードリーダーに接続中..."
-            writeLog("I", "現在BLE接続処理中です...")
-            return
-        }
-
-        // OS側の実際の接続状態を確認してフラグを同期
         val isConnected = BluetoothConnectionHelper.isBleConnected(context, savedBleAddress)
         isBleDeviceConnected = isConnected
-
         if (!isConnected) {
-            if (!savedBleAddress.isNullOrEmpty()) {
-                writeLog("I", "前回接続されたBLEアドレス ($savedBleAddress) がConfigに存在します")
-            }
-            errorMessage = "警告: BLEバーコードリーダーが接続されていません"
-            infoMessage = null // 未接続時はインフォメーションを消す
-            writeLog("W", "BLEバーコードリーダーが未接続です")
-        } else {
-            errorMessage = null // 接続成功時はエラーを確実にクリア
-            infoMessage = "BLEバーコードリーダー接続OK"
-            writeLog("I", "BLEバーコードリーダー接続OK")
+            errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
         }
     }
 
     fun clearInput() {
-        hokanBoxCode = ""
-        hokanShizaiCode = ""
-        chubunruiCode = ""
-        chubunruiMeisho = ""
-        shobunruiCode = ""
-        shobunruiMeisho = ""
+        writeLog("I", "clearInput実行: 入力状態をクリアします (現在の登録件数: $registeredItemCount)")
         seihinBango = ""
         denpyoBango = ""
-        shikyuYoteiSu = ""
-        konkaiShikyuSu = ""
+        buhinKanriNo = ""
+        hinban = ""
+        scannedDenpyoShubetsu = "03"
+        shikyuYoteiSu = "0"
+        konkaiShikyuSu = "0"
+        tehaiSu = 0.0
+        isEmergency = false
+        isDataLoadedForRegister = false
         errorMessage = null
         infoMessage = null
+        writeLog("I", "clearInput完了 -> isRegisterEnabled: $isRegisterEnabled, isDeleteEnabled: $isDeleteEnabled")
     }
 
     fun processScannedCode(scannedText: String) {
-        val tokens = scannedText.split("|")
-        if (tokens.isEmpty()) {
+        if (scannedText.isBlank()) {
             errorMessage = "※『保管BOX』または『保管資材』のQRコードを読み込んでください"
+            writeLog("W", "processScannedCode: 空のテキストがスキャンされました")
             return
+        }
+
+        errorMessage = null
+        infoMessage = null
+        isDataLoadedForRegister = false
+
+        val tokens = scannedText.split("|").map { it.trim() }
+        writeLog("I", "スキャンデータ解析: 項目数=${tokens.size}, テキスト=$scannedText")
+
+        var targetSeihinBango = ""
+        var targetBuhinKanriNo = ""
+        var targetHinban = ""
+
+        when {
+            tokens.size == 3 -> {
+                val qtyStr = tokens[2]
+                if (qtyStr.toIntOrNull() == null) {
+                    errorMessage = "データがTECHS部品表情報に存在しません"
+                    writeLog("W", "スキャン解析エラー(3項目): 数量が不正です -> $qtyStr")
+                    clearInputFields()
+                    return
+                }
+                buhinKanriNo = tokens[1]
+                targetBuhinKanriNo = tokens[1]
+                shikyuYoteiSu = qtyStr
+                konkaiShikyuSu = qtyStr
+                scannedDenpyoShubetsu = "04"
+                writeLog("I", "種別判定: 部材現品票検出 -> denpyoShubetsuCd='04', buhinKanriNo='$buhinKanriNo'")
+            }
+            tokens.size >= 2 && tokens[1] == "03" -> {
+                val orderNo = tokens[0]
+                denpyoBango = orderNo
+                targetSeihinBango = if (orderNo.length >= 9) orderNo.substring(0, 9) else orderNo
+                targetHinban = if (orderNo.length >= 13) orderNo.substring(9, 13) else if (orderNo.length > 9) orderNo.substring(9) else ""
+                seihinBango = targetSeihinBango
+                hinban = targetHinban
+
+                if (tokens.size >= 4) {
+                    val chuzanStr = tokens[3]
+                    if (chuzanStr.toIntOrNull() == null) {
+                        errorMessage = "データがTECHS部品表情報に存在しません"
+                        writeLog("W", "スキャン解析エラー(現品票): 支給残数が不正です -> $chuzanStr")
+                        clearInputFields()
+                        return
+                    }
+                    shikyuYoteiSu = chuzanStr
+                    konkaiShikyuSu = chuzanStr
+                }
+                scannedDenpyoShubetsu = "03"
+                writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', targetSeihinBango='$targetSeihinBango'")
+            }
+            tokens.size >= 2 && tokens[1] == "06" -> {
+                val issueNo = tokens[0]
+                denpyoBango = issueNo
+                targetSeihinBango = if (issueNo.length >= 9) issueNo.substring(0, 9) else issueNo
+                targetHinban = if (issueNo.length >= 13) issueNo.substring(9, 13) else if (issueNo.length > 9) issueNo.substring(9) else ""
+                seihinBango = targetSeihinBango
+                hinban = targetHinban
+
+                if (tokens.size >= 5) {
+                    val tehaiSuStr = tokens[4]
+                    if (tehaiSuStr.toIntOrNull() == null) {
+                        errorMessage = "データがTECHS部品表情報に存在しません"
+                        writeLog("W", "スキャン解析エラー(払出伝票): 手配数が不正です -> $tehaiSuStr")
+                        clearInputFields()
+                        return
+                    }
+                    konkaiShikyuSu = tehaiSuStr
+                }
+                scannedDenpyoShubetsu = "03"
+                writeLog("I", "種別判定: 無償支給払出伝票検出 -> denpyoShubetsuCd='03', issueNo='$issueNo'")
+            }
+            tokens.size == 1 -> {
+                val code = tokens[0]
+                shobunruiCode = code
+                shobunruiMeisho = code
+                hokanBoxCode = code
+                hokanBoxMeisho = code
+
+                writeLog("I", "単体BOXコード設定: $code")
+                return
+            }
+            else -> {
+                errorMessage = "データがTECHS部品表情報に存在しません"
+                writeLog("W", "スキャン解析エラー: 不明なトークン数です -> ${tokens.size}")
+                clearInputFields()
+                return
+            }
+        }
+
+        executeBuhinHyoValidation(targetSeihinBango, targetBuhinKanriNo, targetHinban)
+    }
+
+    private fun clearInputFields() {
+        writeLog("I", "clearInputFields実行")
+        seihinBango = ""
+        denpyoBango = ""
+        buhinKanriNo = ""
+        hinban = ""
+        scannedDenpyoShubetsu = "03"
+        shikyuYoteiSu = "0"
+        konkaiShikyuSu = "0"
+        tehaiSu = 0.0
+        isDataLoadedForRegister = false
+    }
+
+    private fun executeBuhinHyoValidation(seihinBangoQuery: String, buhinKanriNoQuery: String, hinbanQuery: String) {
+        writeLog("I", "executeBuhinHyoValidation開始: seihinBangoQuery='$seihinBangoQuery', buhinKanriNoQuery='$buhinKanriNoQuery', hinbanQuery='$hinbanQuery'")
+        viewModelScope.launch {
+            try {
+                val buhinHyoResponse = apiService.getBuhinHyoInfo(
+                    seihinBango = seihinBangoQuery.ifEmpty { null },
+                    buhinKanriNo = buhinKanriNoQuery.ifEmpty { null },
+                    hinban = hinbanQuery.ifEmpty { null }
+                )
+
+                if (!buhinHyoResponse.isSuccessful || buhinHyoResponse.body() == null) {
+                    errorMessage = "データがTECHS部品表情報に存在しません"
+                    isDataLoadedForRegister = false
+                    writeLog("W", "部品表バリデーション失敗: APIレスポンスが不成功またはnullです (isSuccessful=${buhinHyoResponse.isSuccessful})")
+                    return@launch
+                }
+
+                val buhinInfo = buhinHyoResponse.body()!!
+                val fetchedSeihinBango = buhinInfo.seihinBango ?: seihinBangoQuery
+
+                seihinBango = fetchedSeihinBango
+
+                if (!buhinInfo.buhinKanriNo.isNullOrBlank()) {
+                    buhinKanriNo = buhinInfo.buhinKanriNo
+                }
+
+                val fetchedTehaiSu = buhinInfo.tehaisu ?: 0.0
+                tehaiSu = fetchedTehaiSu
+                shikyuYoteiSu = fetchedTehaiSu.toInt().toString()
+
+                writeLog("I", "部品表データ取得成功 -> seihinBango='$seihinBango', buhinKanriNo='$buhinKanriNo', tehaiSu=$tehaiSu")
+
+                checkEmergency(fetchedSeihinBango)
+
+                val boxCodeToCheck = shobunruiCode.ifEmpty { hokanBoxCode }
+                if (boxCodeToCheck.isNotEmpty()) {
+                    writeLog("I", "保管BOX使用状況チェック開始: boxCodeToCheck='$boxCodeToCheck'")
+                    val boxCheckResponse = apiService.checkHokanBoxSiyo(boxCodeToCheck)
+                    if (boxCheckResponse.isSuccessful) {
+                        val usingSeihinBango = boxCheckResponse.body()?.seihinBango
+                        writeLog("I", "保管BOX使用状況取得成功: usingSeihinBango='$usingSeihinBango'")
+                        if (!usingSeihinBango.isNullOrBlank() && usingSeihinBango != fetchedSeihinBango) {
+                            errorMessage = "既に他の製品No保管BOXを使用しています\n保管BOXを変更してください"
+                            isDataLoadedForRegister = false
+                            writeLog("W", "保管BOX重複エラー: 異なる製品Noで使用されています (using=$usingSeihinBango, current=$fetchedSeihinBango)")
+                            return@launch
+                        }
+                    }
+                }
+
+                // ★ バリデーション成功で登録ボタンを有効化
+                isDataLoadedForRegister = true
+                infoMessage = "『登録』ボタンを押してください"
+                writeLog("I", "バリデーション全完了 -> isRegisterEnabled(isDataLoadedForRegister) = true")
+
+            } catch (e: Exception) {
+                errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
+                isDataLoadedForRegister = false
+                writeLog("E", "部品表バリデーション中に例外発生: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun checkEmergency(targetSeihinBango: String) {
+        writeLog("I", "checkEmergency開始: targetSeihinBango='$targetSeihinBango'")
+        viewModelScope.launch {
+            try {
+                val response = apiService.checkEmergency(targetSeihinBango)
+                if (response.isSuccessful) {
+                    val kinkyuVal = response.body()?.kinkyu
+                    isEmergency = !kinkyuVal.isNullOrBlank()
+                    writeLog("I", "checkEmergency成功: kinkyuVal='$kinkyuVal', isEmergency=$isEmergency, isEmergencyButtonEnabled=$isEmergencyButtonEnabled")
+                } else {
+                    isEmergency = false
+                    writeLog("W", "checkEmergency不成功: code=${response.code()}")
+                }
+            } catch (e: Exception) {
+                isEmergency = false
+                writeLog("E", "checkEmergency例外発生: ${e.message}", e)
+            }
         }
     }
 
     fun executeRegister() {
-        infoMessage = "登録処理が完了しました"
+        errorMessage = null
+        infoMessage = null
+
+        writeLog("I", "=== executeRegister開始 ===")
+        writeLog("I", "送信パラメータ -> denpyoBango: '$denpyoBango', seihinBango: '$seihinBango', buhinKanriNo: '$buhinKanriNo', konkaiShikyuSu: '$konkaiShikyuSu', isEmergency: $isEmergency")
+
+        viewModelScope.launch {
+            try {
+                val konkaiSu = konkaiShikyuSu.toDoubleOrNull() ?: 0.0
+                val denpyoShubetsu = scannedDenpyoShubetsu
+                val kinkyuKbnValue = if (isEmergency) "2" else "1"
+
+                val request = RegisterRequestModel(
+                    denpyoShubetsuCd = denpyoShubetsu,
+                    denpyoBango = denpyoBango,
+                    seihinBango = seihinBango,
+                    buhinKanriNo = buhinKanriNo,
+                    hokanBoxCd = hokanBoxCode,
+                    hokanBoxMeisho = hokanBoxMeisho,
+                    hokanShizaiCd = hokanShizaiCode,
+                    hokanShizaiMeisho = hokanShizaiMeisho,
+                    konkaiShikyuSu = konkaiSu.toInt(),
+                    userCd = userCd,
+                    kinkyuKbn = kinkyuKbnValue
+                )
+
+                writeLog("I", "登録API呼び出し中...")
+                val response = apiService.registerData(request)
+                writeLog("I", "登録APIレスポンス受信: isSuccessful=${response.isSuccessful}, code=${response.code()}")
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    infoMessage = "仕分け登録完了"
+                    registeredItemCount++
+                    isDataLoadedForRegister = false
+                    writeLog("I", "【登録成功】 registeredItemCountがインクリメントされました -> 現在の件数: $registeredItemCount, isMenuEnabled: $isMenuEnabled, isTemporaryStorageEnabled: $isTemporaryStorageEnabled")
+                } else {
+                    val errorBodyString = response.errorBody()?.string()
+                    writeLog("W", "登録APIエラーレスポンス: $errorBodyString")
+                    val errorMsg = if (!errorBodyString.isNullOrEmpty()) {
+                        try {
+                            org.json.JSONObject(errorBodyString).optString("message", "登録処理に失敗しました")
+                        } catch (e: Exception) {
+                            "登録処理に失敗しました"
+                        }
+                    } else {
+                        response.body()?.message ?: "登録処理に失敗しました"
+                    }
+                    errorMessage = errorMsg
+                    writeLog("W", "登録失敗メッセージ設定: $errorMsg")
+                }
+            } catch (e: Exception) {
+                errorMessage = "システム管理者に連絡してください"
+                writeLog("E", "登録処理中に例外発生: ${e.message}", e)
+            }
+        }
     }
 
     fun executeDelete() {
-        infoMessage = "削除処理が完了しました"
+        if (seihinBango.isBlank() && denpyoBango.isBlank()) {
+            errorMessage = "削除対象のデータが読み込まれていません"
+            writeLog("W", "executeDelete: 削除対象データが存在しません")
+            return
+        }
+
+        errorMessage = null
+        infoMessage = null
+
+        val boxCd = shobunruiCode.ifEmpty { hokanBoxCode }
+        val shizaiCd = chubunruiCode.ifEmpty { hokanShizaiCode }
+
+        writeLog("I", "=== executeDelete開始 ===")
+        writeLog("I", "削除パラメータ -> seihinBango: '$seihinBango', boxCd: '$boxCd', shizaiCd: '$shizaiCd'")
+
+        viewModelScope.launch {
+            try {
+                val request = DeleteRequestModel(
+                    genpkanribango = seihinBango,
+                    seihinBango = seihinBango,
+                    hokanBoxCd = boxCd,
+                    hokanShizaiCd = shizaiCd,
+                    hasDetailData = true
+                )
+
+                writeLog("I", "削除API呼び出し中...")
+                val response = apiService.deleteData(request)
+                writeLog("I", "削除APIレスポンス受信: isSuccessful=${response.isSuccessful}, code=${response.code()}")
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    clearInput()
+                    if (registeredItemCount > 0) {
+                        registeredItemCount--
+                    }
+                    infoMessage = "削除完了"
+                    writeLog("I", "【削除成功】 registeredItemCountがデクリメントされました -> 残り件数: $registeredItemCount, isMenuEnabled: $isMenuEnabled, isTemporaryStorageEnabled: $isTemporaryStorageEnabled")
+                } else {
+                    val errorBodyString = response.errorBody()?.string()
+                    writeLog("W", "削除APIエラーレスポンス: $errorBodyString")
+                    val errorMsg = if (!errorBodyString.isNullOrEmpty()) {
+                        try {
+                            org.json.JSONObject(errorBodyString).optString("message", "削除処理に失敗しました")
+                        } catch (e: Exception) {
+                            "削除処理に失敗しました"
+                        }
+                    } else {
+                        "削除処理に失敗しました"
+                    }
+                    errorMessage = errorMsg
+                    writeLog("W", "削除失敗メッセージ設定: $errorMsg")
+                }
+            } catch (e: Exception) {
+                errorMessage = "システム管理者に連絡してください"
+                writeLog("E", "削除処理中に例外発生: ${e.message}", e)
+            }
+        }
     }
 
     fun setInitialSelection(chuCode: String, chuName: String, shoCode: String, shoName: String) {
-        chubunruiCode = chuCode
-        chubunruiMeisho = chuName
-        shobunruiCode = shoCode
-        shobunruiMeisho = shoName
-        if (chuCode.isNotEmpty()) hokanShizaiCode = chuCode
-        if (shoCode.isNotEmpty()) hokanBoxCode = shoCode
+        writeLog("I", "setInitialSelection開始 -> chuCode='$chuCode', chuName='$chuName', shoCode='$shoCode', shoName='$shoName'")
+        if (chuCode.isNotEmpty()) {
+            chubunruiCode = chuCode
+            chubunruiMeisho = chuName
+            hokanShizaiCode = chuCode
+            hokanShizaiMeisho = chuName
+            shobunruiCode = ""
+            shobunruiMeisho = ""
+            hokanBoxCode = ""
+            hokanBoxMeisho = ""
+            writeLog("I", "初期選択: 保管資材を設定しました (Code: $chuCode)")
+        } else if (shoCode.isNotEmpty()) {
+            shobunruiCode = shoCode
+            shobunruiMeisho = shoName
+            hokanBoxCode = shoCode
+            hokanBoxMeisho = shoName
+            chubunruiCode = ""
+            chubunruiMeisho = ""
+            hokanShizaiCode = ""
+            hokanShizaiMeisho = ""
+            writeLog("I", "初期選択: 保管BOXを設定しました (Code: $shoCode)")
+        }
     }
 }
