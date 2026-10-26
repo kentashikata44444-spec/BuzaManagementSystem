@@ -143,8 +143,9 @@ class SKL0104G01ViewModel(
             infoMessage = null
         } else {
             isBleDeviceConnected = false
-            errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
-            writeLog("W", "BLEデバイスが切断されました / ハードウェア異常")
+            // ★ Bluetoothオフ／切断時のメッセージ変更
+            errorMessage = "Bluetoothがオフです\nBluetoothをオンにしてください"
+            writeLog("W", "BLEデバイスが切断されました / Bluetoothオフ")
         }
     }
 
@@ -236,13 +237,15 @@ class SKL0104G01ViewModel(
 
     fun checkBarcodeReaderConnection(context: android.content.Context) {
         if (!BluetoothConnectionHelper.isBluetoothEnabled()) {
-            errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
+            // ★ Bluetoothが無効な場合のメッセージ変更
+            errorMessage = "Bluetoothがオフです\nBluetoothをオンにしてください"
             return
         }
         val isConnected = BluetoothConnectionHelper.isBleConnected(context, savedBleAddress)
         isBleDeviceConnected = isConnected
         if (!isConnected) {
-            errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
+            // ★ バーコードリーダーが接続されていない（電源が入っていない等）場合のメッセージ変更
+            errorMessage = "バーコードリーダーの電源がオフです\nバーコードリーダーの電源をいれてください"
         }
     }
 
@@ -274,6 +277,13 @@ class SKL0104G01ViewModel(
         infoMessage = null
         isDataLoadedForRegister = false
 
+        if (!scannedText.contains("|")) {
+            errorMessage = "データがTECHS部品表情報に存在しません"
+            writeLog("W", "スキャン解析エラー: パイプ区切りが含まれていません -> $scannedText")
+            clearInputFields()
+            return
+        }
+
         val tokens = scannedText.split("|").map { it.trim() }
         writeLog("I", "スキャンデータ解析: 項目数=${tokens.size}, テキスト=$scannedText")
 
@@ -281,73 +291,93 @@ class SKL0104G01ViewModel(
         var targetBuhinKanriNo = ""
         var targetHinban = ""
 
+        // 小数点第2位まで対応しつつ、整数なら整数、小数なら小数第2位までにフォーマットするヘルパー関数
+        fun formatNumber(valueStr: String): String? {
+            val doubleVal = valueStr.toDoubleOrNull() ?: return null
+            return if (doubleVal % 1.0 == 0.0) {
+                doubleVal.toInt().toString() // 整数なら "2" のようにする
+            } else {
+                // 小数がある場合は第2位までフォーマットし、余分な末尾の0や点を削る
+                String.format(java.util.Locale.US, "%.2f", doubleVal).trimEnd('0').trimEnd('.')
+            }
+        }
+
         when {
+            // 【部材現品票】 部材現品票No.|部品管理No.|数量 (3項目)
             tokens.size == 3 -> {
                 val qtyStr = tokens[2]
-                if (qtyStr.toIntOrNull() == null) {
+                val formattedQty = formatNumber(qtyStr)
+                if (formattedQty == null) {
                     errorMessage = "データがTECHS部品表情報に存在しません"
                     writeLog("W", "スキャン解析エラー(3項目): 数量が不正です -> $qtyStr")
                     clearInputFields()
                     return
                 }
+
                 buhinKanriNo = tokens[1]
                 targetBuhinKanriNo = tokens[1]
-                shikyuYoteiSu = qtyStr
-                konkaiShikyuSu = qtyStr
+                shikyuYoteiSu = formattedQty
+                konkaiShikyuSu = formattedQty
                 scannedDenpyoShubetsu = "04"
-                writeLog("I", "種別判定: 部材現品票検出 -> denpyoShubetsuCd='04', buhinKanriNo='$buhinKanriNo'")
+                writeLog("I", "種別判定: 部材現品票検出 -> denpyoShubetsuCd='04', buhinKanriNo='$buhinKanriNo', qty='$formattedQty'")
             }
+            // 【現品票】 注文番号|03|...
             tokens.size >= 2 && tokens[1] == "03" -> {
                 val orderNo = tokens[0]
                 denpyoBango = orderNo
-                targetSeihinBango = if (orderNo.length >= 9) orderNo.substring(0, 9) else orderNo
-                targetHinban = if (orderNo.length >= 13) orderNo.substring(9, 13) else if (orderNo.length > 9) orderNo.substring(9) else ""
+
+                // ★ 製品項番（インデックス5）を製品No.、整理No.（インデックス6）を品番に設定
+                targetSeihinBango = if (tokens.size > 5) tokens[5] else ""
+                targetHinban = if (tokens.size > 6) tokens[6] else ""
+
                 seihinBango = targetSeihinBango
                 hinban = targetHinban
 
                 if (tokens.size >= 4) {
                     val chuzanStr = tokens[3]
-                    if (chuzanStr.toIntOrNull() == null) {
+                    val formattedChuzan = formatNumber(chuzanStr)
+                    if (formattedChuzan == null) {
                         errorMessage = "データがTECHS部品表情報に存在しません"
                         writeLog("W", "スキャン解析エラー(現品票): 支給残数が不正です -> $chuzanStr")
                         clearInputFields()
                         return
                     }
-                    shikyuYoteiSu = chuzanStr
-                    konkaiShikyuSu = chuzanStr
+                    shikyuYoteiSu = formattedChuzan
+                    konkaiShikyuSu = formattedChuzan
                 }
                 scannedDenpyoShubetsu = "03"
-                writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', targetSeihinBango='$targetSeihinBango'")
+                writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', targetSeihinBango='$targetSeihinBango', targetHinban='$targetHinban'")
             }
+            // 【無償支給払出伝票】 出庫番号|06|...
             tokens.size >= 2 && tokens[1] == "06" -> {
                 val issueNo = tokens[0]
                 denpyoBango = issueNo
-                targetSeihinBango = if (issueNo.length >= 9) issueNo.substring(0, 9) else issueNo
-                targetHinban = if (issueNo.length >= 13) issueNo.substring(9, 13) else if (issueNo.length > 9) issueNo.substring(9) else ""
+
+                // ★ 製品項番（インデックス5）を製品No.、連番（インデックス7）を品番に設定[cite: 2]
+                targetSeihinBango = if (tokens.size > 5) tokens[5] else ""
+                targetHinban = if (tokens.size > 7) tokens[7] else ""
+
                 seihinBango = targetSeihinBango
                 hinban = targetHinban
 
                 if (tokens.size >= 5) {
                     val tehaiSuStr = tokens[4]
-                    if (tehaiSuStr.toIntOrNull() == null) {
+                    val formattedTehaiSu = formatNumber(tehaiSuStr)
+                    if (formattedTehaiSu == null) {
                         errorMessage = "データがTECHS部品表情報に存在しません"
                         writeLog("W", "スキャン解析エラー(払出伝票): 手配数が不正です -> $tehaiSuStr")
                         clearInputFields()
                         return
                     }
-                    konkaiShikyuSu = tehaiSuStr
+                    konkaiShikyuSu = formattedTehaiSu
                 }
                 scannedDenpyoShubetsu = "03"
-                writeLog("I", "種別判定: 無償支給払出伝票検出 -> denpyoShubetsuCd='03', issueNo='$issueNo'")
+                writeLog("I", "種別判定: 無償支給払出伝票検出 -> denpyoShubetsuCd='03', issueNo='$issueNo', targetSeihinBango='$targetSeihinBango', targetHinban='$targetHinban'")
             }
             tokens.size == 1 -> {
-                val code = tokens[0]
-                shobunruiCode = code
-                shobunruiMeisho = code
-                hokanBoxCode = code
-                hokanBoxMeisho = code
-
-                writeLog("I", "単体BOXコード設定: $code")
+                errorMessage = "データがTECHS部品表情報に存在しません"
+                writeLog("W", "スキャン解析エラー: 単体コードは許可されていません -> ${tokens[0]}")
+                clearInputFields()
                 return
             }
             else -> {
@@ -402,7 +432,12 @@ class SKL0104G01ViewModel(
 
                 val fetchedTehaiSu = buhinInfo.tehaisu ?: 0.0
                 tehaiSu = fetchedTehaiSu
-                shikyuYoteiSu = fetchedTehaiSu.toInt().toString()
+                // 小数点第2位まで対応しつつフォーマットする処理
+                shikyuYoteiSu = if (fetchedTehaiSu % 1.0 == 0.0) {
+                    fetchedTehaiSu.toInt().toString()
+                } else {
+                    String.format(java.util.Locale.US, "%.2f", fetchedTehaiSu).trimEnd('0').trimEnd('.')
+                }
 
                 writeLog("I", "部品表データ取得成功 -> seihinBango='$seihinBango', buhinKanriNo='$buhinKanriNo', tehaiSu=$tehaiSu")
 
@@ -479,7 +514,7 @@ class SKL0104G01ViewModel(
                     hokanBoxMeisho = hokanBoxMeisho,
                     hokanShizaiCd = hokanShizaiCode,
                     hokanShizaiMeisho = hokanShizaiMeisho,
-                    konkaiShikyuSu = konkaiSu.toInt(),
+                    konkaiShikyuSu = konkaiSu,
                     userCd = userCd,
                     kinkyuKbn = kinkyuKbnValue
                 )
@@ -529,12 +564,13 @@ class SKL0104G01ViewModel(
         val shizaiCd = chubunruiCode.ifEmpty { hokanShizaiCode }
 
         writeLog("I", "=== executeDelete開始 ===")
-        writeLog("I", "削除パラメータ -> seihinBango: '$seihinBango', boxCd: '$boxCd', shizaiCd: '$shizaiCd'")
+        writeLog("I", "削除パラメータ -> seihinBango: '$seihinBango', denpyoBango: '$denpyoBango', boxCd: '$boxCd', shizaiCd: '$shizaiCd'")
 
         viewModelScope.launch {
             try {
+                // ★ 画面が保持している denpyoBango をリクエストに含める
                 val request = DeleteRequestModel(
-                    genpkanribango = seihinBango,
+                    denpyoBango = denpyoBango, // ← ここに伝票番号をセット
                     seihinBango = seihinBango,
                     hokanBoxCd = boxCd,
                     hokanShizaiCd = shizaiCd,
@@ -551,10 +587,9 @@ class SKL0104G01ViewModel(
                         registeredItemCount--
                     }
                     infoMessage = "削除完了"
-                    writeLog("I", "【削除成功】 registeredItemCountがデクリメントされました -> 残り件数: $registeredItemCount, isMenuEnabled: $isMenuEnabled, isTemporaryStorageEnabled: $isTemporaryStorageEnabled")
+                    writeLog("I", "【削除成功】残り件数: $registeredItemCount")
                 } else {
                     val errorBodyString = response.errorBody()?.string()
-                    writeLog("W", "削除APIエラーレスポンス: $errorBodyString")
                     val errorMsg = if (!errorBodyString.isNullOrEmpty()) {
                         try {
                             org.json.JSONObject(errorBodyString).optString("message", "削除処理に失敗しました")

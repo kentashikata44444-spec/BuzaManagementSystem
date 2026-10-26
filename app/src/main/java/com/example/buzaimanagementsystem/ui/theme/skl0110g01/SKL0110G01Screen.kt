@@ -1,4 +1,4 @@
-package com.example.buzaimanagementsystem.ui.theme.skl0111g01
+package com.example.buzaimanagementsystem.ui.theme.skl0110g01
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,26 +13,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.buzaimanagementsystem.utils.FileLogger
 
-private const val TAG = "SKL0111G01Screen"
+private const val TAG = "SKL0110G01Screen"
 
 @Composable
-fun SKL0111G01Screen(
-    viewModel: SKL0111G01ViewModel = viewModel(),
+fun SKL0110G01Screen(
+    viewModel: SKL0110G01ViewModel,
     userCd: String,
     gymTntCd: String,
     gymTntMei: String,
     sourceDivision: String,
     seihinBango: String,
     onNavigateToMenu: () -> Unit,
-    onNavigateToAreaChange: () -> Unit,
-    onNavigateToHokanAreaKakutei: () -> Unit
+    onNavigateToChange: () -> Unit,
+    onNavigateToTemporary: () -> Unit
 ) {
     val context = LocalContext.current
 
-    // 画面初期化時にパラメータをViewModelへ伝達
     LaunchedEffect(userCd, gymTntCd, gymTntMei, sourceDivision, seihinBango) {
         FileLogger.writeLog(context, "DEBUG", TAG, "画面初期化パラメータ受信: userCd=$userCd, gymTntCd=$gymTntCd, sourceDivision=$sourceDivision, seihinBango=$seihinBango")
         viewModel.initParams(userCd, gymTntCd, gymTntMei, sourceDivision, seihinBango)
@@ -48,20 +46,36 @@ fun SKL0111G01Screen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
             // ==========================================
-            // 上部ヘッダー
+            // 上部ヘッダーエリア
             // ==========================================
+
+            // 1段目：業務担当名（右寄せ）
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.End
             ) {
-                // タイトルと下線
+                val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
+                Text(
+                    text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
+                    fontSize = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 2段目：タイトルと下線（左寄せ）- 「仕分け(保管資材確定)」
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start
+            ) {
                 Column(
                     modifier = Modifier.width(IntrinsicSize.Max)
                 ) {
                     Text(
-                        text = "一時保管(保管エリア確定)",
+                        text = "仕分け(保管資材確定)",
                         fontSize = 20.sp,
                         style = MaterialTheme.typography.titleLarge,
                         maxLines = 1
@@ -74,28 +88,19 @@ fun SKL0111G01Screen(
                             .background(MaterialTheme.colorScheme.primary)
                     )
                 }
-
-                // 業務担当名（右寄せ）
-                Text(
-                    text = if (gymTntMei.isNotEmpty()) "業務担当名  $gymTntMei" else "業務担当名",
-                    fontSize = 14.sp
-                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // ==========================================
-            // 上部アクションボタン行（保管エリア変更 / 仕分け・一時保管メニュー）
-            // ==========================================
+            // 3段目：上部アクションボタン行（保管資材変更 / 一時保管(保管エリア確)）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // 保管エリア変更ボタン（常に有効）
                 Button(
                     onClick = {
-                        FileLogger.writeLog(context, "DEBUG", TAG, "保管エリア変更ボタン押下")
-                        onNavigateToAreaChange()
+                        FileLogger.writeLog(context, "DEBUG", TAG, "保管資材変更ボタン押下")
+                        onNavigateToChange()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                     shape = RoundedCornerShape(8.dp),
@@ -103,50 +108,59 @@ fun SKL0111G01Screen(
                         .width(150.dp)
                         .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                 ) {
-                    Text(text = "保管エリア変更", fontSize = 13.sp, color = Color.Black, maxLines = 1)
+                    Text(text = "保管資材変更", fontSize = 13.sp, color = Color.Black, maxLines = 1)
                 }
 
-                // 仕分け・一時保管メニューボタン（仕分け登録が0件の場合は有効、1件以上の場合は無効）
-                val isMenuEnabled = viewModel.registeredCount == 0
                 Button(
                     onClick = {
-                        if (isMenuEnabled) {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "仕分け・一時保管メニューボタン押下")
-                            onNavigateToMenu()
-                        }
+                        FileLogger.writeLog(context, "DEBUG", TAG, "一時保管(保管エリア確)ボタン押下")
+                        onNavigateToTemporary()
                     },
-                    enabled = isMenuEnabled,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isMenuEnabled) Color(0xFFE0E0E0) else Color.LightGray
-                    ),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                         .width(170.dp)
-                        .border(1.dp, if (isMenuEnabled) Color.Black else Color.Gray, RoundedCornerShape(8.dp))
+                        .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                 ) {
                     Text(
-                        text = "仕分け・一時保管メニュー",
+                        text = "一時保管(保管エリア確)",
                         fontSize = 12.sp,
-                        color = if (isMenuEnabled) Color.Black else Color.DarkGray,
+                        color = Color.Black,
                         maxLines = 1
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            // 一般的な情報メッセージ表示
+            if (viewModel.infoMessage != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE8F5E9), shape = RoundedCornerShape(4.dp))
+                        .padding(8.dp)
+                ) {
+                    Text(text = viewModel.infoMessage!!, color = Color(0xFF2E7D32), fontSize = 13.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // ==========================================
-            // 中央メイン表示エリア（製品No / 保管エリア / 保管資材）
+            // 中央メイン表示エリア
             // ==========================================
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 製品No.
-                Column {
-                    Text(text = "製品No.", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
+                // 1. 製品No. 行
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "製品No.", fontSize = 14.sp, modifier = Modifier.width(90.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -160,37 +174,19 @@ fun SKL0111G01Screen(
                     }
                 }
 
-                // 保管エリアメッセージ
-                if (viewModel.areaMessage.isNotEmpty()) {
+                // ★ 保管資材メッセージエリア（製品No. と 保管資材の間）
+                if (viewModel.errorMessage != null) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+                            .background(Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp))
+                            .border(1.dp, Color.Red, shape = RoundedCornerShape(4.dp))
                             .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = viewModel.areaMessage, fontSize = 12.sp, color = Color.DarkGray)
+                        Text(text = viewModel.errorMessage!!, color = Color.Red, fontSize = 13.sp)
                     }
-                }
-
-                // 保管エリア
-                Column {
-                    Text(text = "保管エリア", fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .background(Color(0xFFD0E1F9), RoundedCornerShape(4.dp))
-                            .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(text = viewModel.hokanAreaName, fontSize = 16.sp, color = Color.Black)
-                    }
-                }
-
-                // 保管資材メッセージ
-                if (viewModel.shizaiMessage.isNotEmpty()) {
+                } else if (viewModel.shizaiMessage.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -202,10 +198,12 @@ fun SKL0111G01Screen(
                     }
                 }
 
-                // 保管資材
-                Column {
-                    Text(text = "保管資材", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
+                // 2. 保管資材 行（ヘルプアイコン付きラベル等にも対応可能）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "保管資材", fontSize = 14.sp, modifier = Modifier.width(90.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -218,35 +216,38 @@ fun SKL0111G01Screen(
                         Text(text = viewModel.hokanShizaiName, fontSize = 16.sp, color = Color.Black)
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ==========================================
-            // 最下部ボタン（一時保管・保管エリア確定）
-            // ==========================================
-            val isKakuteiEnabled = viewModel.registeredCount > 0
-            Button(
-                onClick = {
-                    if (isKakuteiEnabled) {
-                        FileLogger.writeLog(context, "DEBUG", TAG, "一時保管(保管エリア確定)ボタン押下")
-                        onNavigateToHokanAreaKakutei()
+                // ★ 保管BOXメッセージエリア（保管資材 と 保管BOXの間）
+                if (viewModel.boxMessage.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = viewModel.boxMessage, fontSize = 12.sp, color = Color.DarkGray)
                     }
-                },
-                enabled = isKakuteiEnabled,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(55.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isKakuteiEnabled) MaterialTheme.colorScheme.primary else Color.LightGray
-                ),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(
-                    text = "一時保管(保管エリア確定)",
-                    fontSize = 16.sp,
-                    color = if (isKakuteiEnabled) Color.White else Color.DarkGray
-                )
+                }
+
+                // 3. 保管BOX 行
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "保管BOX", fontSize = 14.sp, modifier = Modifier.width(90.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .background(Color(0xFFD0E1F9), RoundedCornerShape(4.dp))
+                            .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(text = viewModel.hokanBoxName, fontSize = 16.sp, color = Color.Black)
+                    }
+                }
             }
         }
     }

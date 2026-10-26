@@ -28,8 +28,8 @@ data class HokanBoxSiyoResponse(
 
 // 削除リクエストモデル
 data class DeleteRequestModel(
-    @SerializedName(value = "GENPKANRIBANGO", alternate = ["genpkanribango", "Genpkanribango"])
-    val genpkanribango: String,
+    @SerializedName(value = "DENPYOBANGO", alternate = ["denpyoBango", "DenpyoBango"])
+    val denpyoBango: String,
 
 
     @SerializedName(value = "SEIHINBANGO", alternate = ["seihinBango", "SeihinBango"])
@@ -82,7 +82,7 @@ data class RegisterRequestModel(
     val hokanShizaiMeisho: String,
 
     @SerializedName(value = "KONKAISHIKYUSU", alternate = ["konkaiShikyuSu", "KonkaiShikyuSu"])
-    val konkaiShikyuSu: Int,
+    val konkaiShikyuSu: Double,
 
     @SerializedName(value = "USERCD", alternate = ["userCd", "UserCd"])
     val userCd: String,

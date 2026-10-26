@@ -34,12 +34,12 @@ import com.example.buzaimanagementsystem.ui.theme.skl0101g01.SKL0101G01ViewModel
 // SKL0104G01（仕分け：鈴鹿支給品現品確定画面）関連
 import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01Screen
 import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01ApiService
+import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01ApiService
 import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01ViewModel as SKL0104ViewModel
 
-// SKL0111G01（一時保管/保管エリア確認画面）関連
-import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01Screen
-import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ApiService
-import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ViewModel as SKL0111ViewModel
+// SKL0110G01（一時保管/保管エリア確認画面）関連
+import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01Screen
+import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01ViewModel as SKL0110ViewModel
 
 import com.example.buzaimanagementsystem.utils.CommonApiService
 import com.example.buzaimanagementsystem.utils.FileLogger
@@ -49,7 +49,6 @@ import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-import com.example.buzaimanagementsystem.BuildConfig
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -143,7 +142,7 @@ class MainActivity : ComponentActivity() {
                     var selectedShobunruiCode by remember { mutableStateOf("") }
                     var selectedShobunruiName by remember { mutableStateOf("") }
 
-                    // SKL0104からSKL0111へ引き継ぐ製品No
+                    // SKL0104からSKL0110へ引き継ぐ製品No
                     var selectedSeihinBango by remember { mutableStateOf("") }
 
                     when (currentScreen) {
@@ -228,10 +227,10 @@ class MainActivity : ComponentActivity() {
                             var subScreen by remember { mutableStateOf("scan") }
 
                             when (subScreen) {
-                                "skl0111" -> {
-                                    val skl0111ApiService = retrofit.create(SKL0111G01ApiService::class.java)
-                                    val skl0111ViewModel = remember(loginUserCd, gymTntCd, gymTntMei, selectedSourceDiv, selectedSeihinBango) {
-                                        SKL0111ViewModel(application, skl0111ApiService).apply {
+                                "skl0110" -> {
+                                    val skl0110ApiService = retrofit.create(SKL0110G01ApiService::class.java)
+                                    val skl0110ViewModel = remember(loginUserCd, gymTntCd, gymTntMei, selectedSourceDiv, selectedSeihinBango) {
+                                        SKL0110ViewModel(application, skl0110ApiService).apply {
                                             initParams(
                                                 userCd = loginUserCd,
                                                 gymTntCd = gymTntCd,
@@ -242,8 +241,8 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
 
-                                    SKL0111G01Screen(
-                                        viewModel = skl0111ViewModel,
+                                    SKL0110G01Screen(
+                                        viewModel = skl0110ViewModel,
                                         userCd = loginUserCd,
                                         gymTntCd = gymTntCd,
                                         gymTntMei = gymTntMei,
@@ -252,10 +251,10 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToMenu = {
                                             currentScreen = "shiwake_menu"
                                         },
-                                        onNavigateToAreaChange = {
+                                        onNavigateToChange = { // ← onNavigateToAreaChange から変更
                                             subScreen = "skl0104"
                                         },
-                                        onNavigateToHokanAreaKakutei = {
+                                        onNavigateToTemporary = { // ← onNavigateToHokanAreaKakutei から変更
                                             currentScreen = "menu"
                                         }
                                     )
@@ -304,7 +303,7 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToTemporary = { _, _, _, _, sb ->
                                             writeLog("D", "一時保管(保管エリア確定)画面へ遷移: seihinBango=$sb")
                                             selectedSeihinBango = sb
-                                            subScreen = "skl0111"
+                                            subScreen = "skl0110"
                                         },
                                         onNavigateToEmergency = { _, _, _ -> }
                                     )

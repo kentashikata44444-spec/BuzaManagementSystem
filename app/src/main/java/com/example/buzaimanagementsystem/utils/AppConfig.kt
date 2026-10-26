@@ -30,7 +30,7 @@ object AppConfig {
         // 例2: IPアドレスが "192.168.137.48" のタブレットの場合
         DeviceMapping(
             targetIpAddress = "192.168.137.48",
-            targetMacAddress = "DC:0D:30:13:05:26",
+            targetMacAddress = "DC:0D:30:12:FF:F4",
             targetMeisho = "EY-017ZP"
         )
     )

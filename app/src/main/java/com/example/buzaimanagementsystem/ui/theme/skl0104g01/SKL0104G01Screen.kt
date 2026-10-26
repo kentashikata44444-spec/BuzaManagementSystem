@@ -448,12 +448,14 @@ fun SKL0104G01Screen(
                             .background(Color(0xFFD4E4F7), shape = RoundedCornerShape(4.dp))
                             .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
                             .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterStart
+                        contentAlignment = Alignment.CenterEnd // 右側に配置
                     ) {
                         Text(
                             text = viewModel.shikyuYoteiSu,
                             fontSize = 14.sp,
                             color = Color.Black,
+                            textAlign = TextAlign.End, // 右寄せ
+                            modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
                     }
@@ -466,12 +468,14 @@ fun SKL0104G01Screen(
                             .background(Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp))
                             .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
                             .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterStart
+                        contentAlignment = Alignment.CenterEnd // 右側に配置
                     ) {
                         Text(
                             text = viewModel.konkaiShikyuSu,
                             fontSize = 14.sp,
                             color = Color.Black,
+                            textAlign = TextAlign.End, // 右寄せ
+                            modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
                     }
