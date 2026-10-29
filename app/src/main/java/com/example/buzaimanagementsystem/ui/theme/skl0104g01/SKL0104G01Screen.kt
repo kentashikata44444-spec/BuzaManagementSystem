@@ -46,9 +46,7 @@ fun SKL0104G01Screen(
     shoName: String = "",
     onNavigateToMain: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
     onNavigateToMenu: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
-    // 保管BOX・保管資材変更（SKL0101G01へ遷移）: 4つの引数を期待
     onNavigateToChange: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String) -> Unit,
-    // 一時保管（SKL0111G01へ遷移）: 5つの引数を期待
     onNavigateToTemporary: (userCd: String, gymTntCd: String, gymTntMei: String, sourceDivision: String, seihinBango: String) -> Unit,
     onNavigateToEmergency: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit
 ) {
@@ -211,7 +209,6 @@ fun SKL0104G01Screen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // ★ 仕分け・一時保管メニューボタン（登録件数0件のとき有効、1件以上で無効）[cite: 2]
                     Button(
                         onClick = { onNavigateToMenu(userCd, gymTntCd, gymTntMei) },
                         enabled = viewModel.isMenuEnabled,
@@ -251,7 +248,6 @@ fun SKL0104G01Screen(
                         Text(text = "保管BOX・保管資材変更", color = Color.Black, fontSize = 12.sp, maxLines = 1)
                     }
 
-                    // ★ 一時保管ボタン（登録件数が1件以上の場合に有効、ゼロ件は無効）[cite: 2]
                     Button(
                         onClick = {
                             onNavigateToTemporary(
@@ -448,13 +444,13 @@ fun SKL0104G01Screen(
                             .background(Color(0xFFD4E4F7), shape = RoundedCornerShape(4.dp))
                             .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
                             .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterEnd // 右側に配置
+                        contentAlignment = Alignment.CenterEnd
                     ) {
                         Text(
                             text = viewModel.shikyuYoteiSu,
                             fontSize = 14.sp,
                             color = Color.Black,
-                            textAlign = TextAlign.End, // 右寄せ
+                            textAlign = TextAlign.End,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
@@ -468,13 +464,13 @@ fun SKL0104G01Screen(
                             .background(Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp))
                             .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
                             .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.CenterEnd // 右側に配置
+                        contentAlignment = Alignment.CenterEnd
                     ) {
                         Text(
                             text = viewModel.konkaiShikyuSu,
                             fontSize = 14.sp,
                             color = Color.Black,
-                            textAlign = TextAlign.End, // 右寄せ
+                            textAlign = TextAlign.End,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
@@ -488,7 +484,6 @@ fun SKL0104G01Screen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // ★ 登録ボタン（バリデーション成功時のみ有効）
                     Button(
                         onClick = { viewModel.executeRegister() },
                         enabled = viewModel.isRegisterEnabled,
@@ -501,7 +496,6 @@ fun SKL0104G01Screen(
                         Text(text = "登録", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    // ★ 削除ボタン（データ読込済みの場合有効）
                     Button(
                         onClick = { viewModel.executeDelete() },
                         enabled = viewModel.isDeleteEnabled,
@@ -522,7 +516,6 @@ fun SKL0104G01Screen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // ★ 緊急品集約ボタン（緊急品表示が有りの場合のみ有効）[cite: 2]
                     Button(
                         onClick = { onNavigateToEmergency(userCd, gymTntCd, gymTntMei) },
                         enabled = viewModel.isEmergencyButtonEnabled,
@@ -562,7 +555,7 @@ fun SKL0104G01Screen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
 
-            // === 保管資材説明モーダル（AlertDialog）をBox内の最背面/最前面（Columnの外側の末尾）に配置 ===
+            // === 保管資材説明モーダル（AlertDialog） ===
             if (showHelpDialog) {
                 AlertDialog(
                     onDismissRequest = { showHelpDialog = false },
@@ -600,7 +593,6 @@ fun SKL0104G01Screen(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // コンビテナ
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "コンビテナ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -611,7 +603,6 @@ fun SKL0104G01Screen(
                                 )
                             }
 
-                            // パレット
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "パレット", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -622,7 +613,6 @@ fun SKL0104G01Screen(
                                 )
                             }
 
-                            // 台車
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -642,7 +632,6 @@ fun SKL0104G01Screen(
                                 }
                             }
 
-                            // 棚
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))

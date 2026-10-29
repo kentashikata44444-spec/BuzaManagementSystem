@@ -69,6 +69,13 @@ data class RegisterRequestModel(
     @SerializedName(value = "BUHINKANRINO", alternate = ["buhinKanriNo", "BuhinKanriNo"])
     val buhinKanriNo: String,
 
+    // ★ 保管エリアコード・名称を追加（未選択時は null または空文字を許容）
+    @SerializedName(value = "HOKANERIACD", alternate = ["hokanEriaCd", "HokanEriaCd"])
+    val hokanEriaCd: String? = null,
+
+    @SerializedName(value = "HOKANERIAMEISHO", alternate = ["hokanEriaMeisho", "HokanEriaMeisho"])
+    val hokanEriaMeisho: String? = null,
+
     @SerializedName(value = "HOKANBOXCD", alternate = ["hokanBoxCd", "HokanBoxCd"])
     val hokanBoxCd: String,
 
@@ -87,9 +94,12 @@ data class RegisterRequestModel(
     @SerializedName(value = "USERCD", alternate = ["userCd", "UserCd"])
     val userCd: String,
 
-    // ★ ここを追加！
     @SerializedName(value = "KINKYUKBN", alternate = ["kinkyuKbn", "Kinkyukbn"])
-    val kinkyuKbn: String? = "1"
+    val kinkyuKbn: String? = "1",
+
+    // ★ 業務担当名（仕分担当名）を受け渡すプロパティを追加
+    @SerializedName(value = "SHIWAKETNTMEI", alternate = ["shiwakeTntMei", "ShiwakeTntMei", "gymTntMei"])
+    val shiwakeTntMei: String? = ""
 )
 
 // 登録レスポンスモデル

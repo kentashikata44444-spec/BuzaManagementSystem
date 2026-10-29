@@ -34,13 +34,17 @@ import com.example.buzaimanagementsystem.ui.theme.skl0101g01.SKL0101G01ViewModel
 // SKL0104G01（仕分け：鈴鹿支給品現品確定画面）関連
 import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01Screen
 import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01ApiService
-import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01ApiService
-import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01ViewModel as SKL0104ViewModel
+import com.example.buzaimanagementsystem.ui.theme.skl0104g01.SKL0104G01ViewModel
 
 // SKL0110G01（一時保管/保管エリア確認画面）関連
 import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01Screen
+import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01ApiService
 import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01ViewModel as SKL0110ViewModel
 
+// SKL0111G01（一時保管/保管エリア確定画面）関連
+import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01Screen
+import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ApiService
+import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ViewModel as SKL0111ViewModel
 import com.example.buzaimanagementsystem.utils.CommonApiService
 import com.example.buzaimanagementsystem.utils.FileLogger
 import com.example.buzaimanagementsystem.utils.performLogoutAndExit
@@ -228,8 +232,15 @@ class MainActivity : ComponentActivity() {
 
                             when (subScreen) {
                                 "skl0110" -> {
-                                    val skl0110ApiService = retrofit.create(SKL0110G01ApiService::class.java)
-                                    val skl0110ViewModel = remember(loginUserCd, gymTntCd, gymTntMei, selectedSourceDiv, selectedSeihinBango) {
+                                    val skl0110ApiService =
+                                        retrofit.create(SKL0110G01ApiService::class.java)
+                                    val skl0110ViewModel = remember(
+                                        loginUserCd,
+                                        gymTntCd,
+                                        gymTntMei,
+                                        selectedSourceDiv,
+                                        selectedSeihinBango
+                                    ) {
                                         SKL0110ViewModel(application, skl0110ApiService).apply {
                                             initParams(
                                                 userCd = loginUserCd,
@@ -238,6 +249,14 @@ class MainActivity : ComponentActivity() {
                                                 sourceDivision = selectedSourceDiv,
                                                 seihinBango = selectedSeihinBango
                                             )
+                                            // ★ 保管資材確定対象データが0件の場合に自動でSKL0111へ遷移する設定
+                                            onNavigateToNextScreen = {
+                                                writeLog(
+                                                    "D",
+                                                    "保管資材確定対象データが0件のため、自動で一時保管(保管エリア確定)画面へ遷移します: seihinBango=$selectedSeihinBango"
+                                                )
+                                                subScreen = "skl0111"
+                                            }
                                         }
                                     }
 
@@ -251,23 +270,66 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToMenu = {
                                             currentScreen = "shiwake_menu"
                                         },
-                                        onNavigateToChange = { // ← onNavigateToAreaChange から変更
-                                            subScreen = "skl0104"
+                                        onNavigateToChange = {
+                                            skl0110ViewModel.clearHokanShizai()
                                         },
-                                        onNavigateToTemporary = { // ← onNavigateToHokanAreaKakutei から変更
-                                            currentScreen = "menu"
+                                        onNavigateToTemporary = {
+                                            writeLog(
+                                                "D",
+                                                "一時保管(保管エリア確定)画面へ手動遷移: seihinBango=$selectedSeihinBango"
+                                            )
+                                            subScreen = "skl0111"
+                                        }
+                                    )
+                                }
+
+                                // SKL0111G01（一時保管: 保管エリア確定画面）のルーティング
+                                "skl0111" -> {
+                                    val skl0111ApiService =
+                                        retrofit.create(SKL0111G01ApiService::class.java)
+                                    val skl0111ViewModel = remember(
+                                        loginUserCd,
+                                        gymTntCd,
+                                        gymTntMei,
+                                        selectedSourceDiv,
+                                        selectedSeihinBango
+                                    ) {
+                                        SKL0111ViewModel(application, skl0111ApiService).apply {
+                                            initParams(
+                                                userCd = loginUserCd,
+                                                gymTntCd = gymTntCd,
+                                                gymTntMei = gymTntMei,
+                                                sourceDivision = selectedSourceDiv,
+                                                seihinBango = selectedSeihinBango
+                                            )
+                                        }
+                                    }
+
+                                    SKL0111G01Screen(
+                                        viewModel = skl0111ViewModel,
+                                        userCd = loginUserCd,
+                                        gymTntCd = gymTntCd,
+                                        gymTntMei = gymTntMei,
+                                        sourceDivision = selectedSourceDiv,
+                                        seihinBango = selectedSeihinBango,
+                                        onNavigateToMenu = {
+                                            currentScreen = "shiwake_menu"
+                                        },
+                                        onNavigateToAreaChange = {
+                                            skl0111ViewModel.clearHokanArea()
                                         }
                                     )
                                 }
 
                                 "skl0104" -> {
-                                    val skl0104ApiService = retrofit.create(SKL0104G01ApiService::class.java)
+                                    val skl0104ApiService =
+                                        retrofit.create(SKL0104G01ApiService::class.java)
                                     val skl0104ViewModel = remember(
                                         loginUserCd, gymTntCd, gymTntMei, selectedSourceDiv,
                                         selectedChubunruiCode, selectedChubunruiName,
                                         selectedShobunruiCode, selectedShobunruiName
                                     ) {
-                                        SKL0104ViewModel(application, skl0104ApiService).apply {
+                                        SKL0104G01ViewModel(application, skl0104ApiService).apply {
                                             initParams(
                                                 userCd = loginUserCd,
                                                 gymTntCd = gymTntCd,
@@ -293,15 +355,24 @@ class MainActivity : ComponentActivity() {
                                         shoName = selectedShobunruiName,
                                         onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
                                         onNavigateToMenu = { _, _, _ ->
-                                            writeLog("D", "仕分け・一時保管メニューへ戻る (shiwake_menu)")
+                                            writeLog(
+                                                "D",
+                                                "仕分け・一時保管メニューへ戻る (shiwake_menu)"
+                                            )
                                             currentScreen = "shiwake_menu"
                                         },
                                         onNavigateToChange = { _, _, _, _ ->
-                                            writeLog("D", "保管BOX・保管資材変更へ遷移 (SKL0101に戻る)")
+                                            writeLog(
+                                                "D",
+                                                "保管BOX・保管資材変更へ遷移 (SKL0101に戻る)"
+                                            )
                                             subScreen = "scan"
                                         },
                                         onNavigateToTemporary = { _, _, _, _, sb ->
-                                            writeLog("D", "一時保管(保管エリア確定)画面へ遷移: seihinBango=$sb")
+                                            writeLog(
+                                                "D",
+                                                "一時保管(保管エリア確定)画面へ遷移: seihinBango=$sb"
+                                            )
                                             selectedSeihinBango = sb
                                             subScreen = "skl0110"
                                         },
@@ -310,8 +381,14 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 else -> {
-                                    val skl0101ApiService = retrofit.create(SKL0101G01ApiService::class.java)
-                                    val skl0101ViewModel = remember { SKL0101ViewModel(application, skl0101ApiService) }
+                                    val skl0101ApiService =
+                                        retrofit.create(SKL0101G01ApiService::class.java)
+                                    val skl0101ViewModel = remember {
+                                        SKL0101ViewModel(
+                                            application,
+                                            skl0101ApiService
+                                        )
+                                    }
 
                                     SKL0101G01Screen(
                                         viewModel = skl0101ViewModel,
@@ -320,9 +397,14 @@ class MainActivity : ComponentActivity() {
                                         gymTntMei = gymTntMei,
                                         sourceDivision = selectedSourceDiv,
                                         onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
-                                        onNavigateToMenu = { _, _, _ -> currentScreen = "shiwake_menu" },
+                                        onNavigateToMenu = { _, _, _ ->
+                                            currentScreen = "shiwake_menu"
+                                        },
                                         onNavigateToShitei = { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
-                                            writeLog("D", "仕分け画面 -> 次の画面へ遷移 (sourceDiv=$sDiv, cCode=$cCode, sCode=$sCode)")
+                                            writeLog(
+                                                "D",
+                                                "仕分け画面 -> 次の画面へ遷移 (sourceDiv=$sDiv, cCode=$cCode, sCode=$sCode)"
+                                            )
                                             selectedSourceDiv = sDiv
                                             selectedChubunruiCode = cCode
                                             selectedChubunruiName = cName

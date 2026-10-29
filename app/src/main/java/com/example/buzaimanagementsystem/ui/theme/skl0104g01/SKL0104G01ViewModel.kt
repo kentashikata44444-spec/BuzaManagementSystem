@@ -85,7 +85,7 @@ class SKL0104G01ViewModel(
         private set
 
     // ==========================================
-    // ★ ボタン制御用の状態・判定プロパティ（詳細ログ付き）
+    // ★ ボタン制御用の状態・判定プロパティ
     // ==========================================
     var registeredItemCount by mutableStateOf(0)
         private set
@@ -101,11 +101,7 @@ class SKL0104G01ViewModel(
 
     // 一時保管（保管エリア確定）: 登録件数が1件以上の場合は有効、ゼロ件は無効
     val isTemporaryStorageEnabled: Boolean
-        get() {
-            val enabled = registeredItemCount > 0
-            // 頻繁な評価ログが出すぎる場合はコメントアウトしてください
-            return enabled
-        }
+        get() = registeredItemCount > 0
 
     // 緊急品集約: 緊急品表示が有りの場合は有効、無しの場合は無効
     val isEmergencyButtonEnabled: Boolean
@@ -121,10 +117,7 @@ class SKL0104G01ViewModel(
 
     // 仕分け・一時保管メニュー: 登録件数がゼロ件の場合は有効、1件以上の場合は無効
     val isMenuEnabled: Boolean
-        get() {
-            val enabled = registeredItemCount == 0
-            return enabled
-        }
+        get() = registeredItemCount == 0
 
     // 読み取り: 常に有効
     val isScanEnabled: Boolean = true
@@ -143,7 +136,6 @@ class SKL0104G01ViewModel(
             infoMessage = null
         } else {
             isBleDeviceConnected = false
-            // ★ Bluetoothオフ／切断時のメッセージ変更
             errorMessage = "Bluetoothがオフです\nBluetoothをオンにしてください"
             writeLog("W", "BLEデバイスが切断されました / Bluetoothオフ")
         }
@@ -237,14 +229,12 @@ class SKL0104G01ViewModel(
 
     fun checkBarcodeReaderConnection(context: android.content.Context) {
         if (!BluetoothConnectionHelper.isBluetoothEnabled()) {
-            // ★ Bluetoothが無効な場合のメッセージ変更
             errorMessage = "Bluetoothがオフです\nBluetoothをオンにしてください"
             return
         }
         val isConnected = BluetoothConnectionHelper.isBleConnected(context, savedBleAddress)
         isBleDeviceConnected = isConnected
         if (!isConnected) {
-            // ★ バーコードリーダーが接続されていない（電源が入っていない等）場合のメッセージ変更
             errorMessage = "バーコードリーダーの電源がオフです\nバーコードリーダーの電源をいれてください"
         }
     }
@@ -291,19 +281,16 @@ class SKL0104G01ViewModel(
         var targetBuhinKanriNo = ""
         var targetHinban = ""
 
-        // 小数点第2位まで対応しつつ、整数なら整数、小数なら小数第2位までにフォーマットするヘルパー関数
         fun formatNumber(valueStr: String): String? {
             val doubleVal = valueStr.toDoubleOrNull() ?: return null
             return if (doubleVal % 1.0 == 0.0) {
-                doubleVal.toInt().toString() // 整数なら "2" のようにする
+                doubleVal.toInt().toString()
             } else {
-                // 小数がある場合は第2位までフォーマットし、余分な末尾の0や点を削る
                 String.format(java.util.Locale.US, "%.2f", doubleVal).trimEnd('0').trimEnd('.')
             }
         }
 
         when {
-            // 【部材現品票】 部材現品票No.|部品管理No.|数量 (3項目)
             tokens.size == 3 -> {
                 val qtyStr = tokens[2]
                 val formattedQty = formatNumber(qtyStr)
@@ -321,12 +308,10 @@ class SKL0104G01ViewModel(
                 scannedDenpyoShubetsu = "04"
                 writeLog("I", "種別判定: 部材現品票検出 -> denpyoShubetsuCd='04', buhinKanriNo='$buhinKanriNo', qty='$formattedQty'")
             }
-            // 【現品票】 注文番号|03|...
             tokens.size >= 2 && tokens[1] == "03" -> {
                 val orderNo = tokens[0]
                 denpyoBango = orderNo
 
-                // ★ 製品項番（インデックス5）を製品No.、整理No.（インデックス6）を品番に設定
                 targetSeihinBango = if (tokens.size > 5) tokens[5] else ""
                 targetHinban = if (tokens.size > 6) tokens[6] else ""
 
@@ -348,12 +333,10 @@ class SKL0104G01ViewModel(
                 scannedDenpyoShubetsu = "03"
                 writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', targetSeihinBango='$targetSeihinBango', targetHinban='$targetHinban'")
             }
-            // 【無償支給払出伝票】 出庫番号|06|...
             tokens.size >= 2 && tokens[1] == "06" -> {
                 val issueNo = tokens[0]
                 denpyoBango = issueNo
 
-                // ★ 製品項番（インデックス5）を製品No.、連番（インデックス7）を品番に設定[cite: 2]
                 targetSeihinBango = if (tokens.size > 5) tokens[5] else ""
                 targetHinban = if (tokens.size > 7) tokens[7] else ""
 
@@ -432,7 +415,6 @@ class SKL0104G01ViewModel(
 
                 val fetchedTehaiSu = buhinInfo.tehaisu ?: 0.0
                 tehaiSu = fetchedTehaiSu
-                // 小数点第2位まで対応しつつフォーマットする処理
                 shikyuYoteiSu = if (fetchedTehaiSu % 1.0 == 0.0) {
                     fetchedTehaiSu.toInt().toString()
                 } else {
@@ -459,7 +441,6 @@ class SKL0104G01ViewModel(
                     }
                 }
 
-                // ★ バリデーション成功で登録ボタンを有効化
                 isDataLoadedForRegister = true
                 infoMessage = "『登録』ボタンを押してください"
                 writeLog("I", "バリデーション全完了 -> isRegisterEnabled(isDataLoadedForRegister) = true")
@@ -497,7 +478,7 @@ class SKL0104G01ViewModel(
         infoMessage = null
 
         writeLog("I", "=== executeRegister開始 ===")
-        writeLog("I", "送信パラメータ -> denpyoBango: '$denpyoBango', seihinBango: '$seihinBango', buhinKanriNo: '$buhinKanriNo', konkaiShikyuSu: '$konkaiShikyuSu', isEmergency: $isEmergency")
+        writeLog("I", "送信パラメータ -> denpyoBango: '$denpyoBango', seihinBango: '$seihinBango', buhinKanriNo: '$buhinKanriNo', konkaiShikyuSu: '$konkaiShikyuSu', isEmergency: $isEmergency, gymTntMei: '$gymTntMei'")
 
         viewModelScope.launch {
             try {
@@ -510,13 +491,16 @@ class SKL0104G01ViewModel(
                     denpyoBango = denpyoBango,
                     seihinBango = seihinBango,
                     buhinKanriNo = buhinKanriNo,
+                    hokanEriaCd = null,
+                    hokanEriaMeisho = null,
                     hokanBoxCd = hokanBoxCode,
                     hokanBoxMeisho = hokanBoxMeisho,
                     hokanShizaiCd = hokanShizaiCode,
                     hokanShizaiMeisho = hokanShizaiMeisho,
                     konkaiShikyuSu = konkaiSu,
                     userCd = userCd,
-                    kinkyuKbn = kinkyuKbnValue
+                    kinkyuKbn = kinkyuKbnValue,
+                    shiwakeTntMei = gymTntMei
                 )
 
                 writeLog("I", "登録API呼び出し中...")
@@ -527,7 +511,7 @@ class SKL0104G01ViewModel(
                     infoMessage = "仕分け登録完了"
                     registeredItemCount++
                     isDataLoadedForRegister = false
-                    writeLog("I", "【登録成功】 registeredItemCountがインクリメントされました -> 現在の件数: $registeredItemCount, isMenuEnabled: $isMenuEnabled, isTemporaryStorageEnabled: $isTemporaryStorageEnabled")
+                    writeLog("I", "【登録成功】 registeredItemCountがインクリメントされました -> 現在の件数: $registeredItemCount")
                 } else {
                     val errorBodyString = response.errorBody()?.string()
                     writeLog("W", "登録APIエラーレスポンス: $errorBodyString")
@@ -568,9 +552,8 @@ class SKL0104G01ViewModel(
 
         viewModelScope.launch {
             try {
-                // ★ 画面が保持している denpyoBango をリクエストに含める
                 val request = DeleteRequestModel(
-                    denpyoBango = denpyoBango, // ← ここに伝票番号をセット
+                    denpyoBango = denpyoBango,
                     seihinBango = seihinBango,
                     hokanBoxCd = boxCd,
                     hokanShizaiCd = shizaiCd,
