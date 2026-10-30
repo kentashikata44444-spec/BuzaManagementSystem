@@ -1,5 +1,6 @@
 package com.example.buzaimanagementsystem
 
+import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -10,12 +11,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.example.buzaimanagementsystem.utils.FileLogger
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import java.util.concurrent.Executors
 
+private const val TAG = "OcrCameraView"
+
+/**
+ * カメラ映像を表示し、ML Kitでバーコード/QRコードを読み取るコンポーネント
+ */
 @Composable
 fun OcrCameraView(
     onTextScanned: (String) -> Unit
@@ -23,6 +30,30 @@ fun OcrCameraView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    /**
+     * ログ出力用の共通ヘルパー
+     */
+    fun writeLog(level: String, message: String, throwable: Throwable? = null) {
+        when (level) {
+            "D" -> {
+                Log.d(TAG, message, throwable)
+                FileLogger.writeLog(context, "DEBUG", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
+            }
+            "W" -> {
+                Log.w(TAG, message, throwable)
+                FileLogger.writeLog(context, "WARN", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
+            }
+            "E" -> {
+                Log.e(TAG, message, throwable)
+                FileLogger.writeLog(context, "ERROR", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
+            }
+            "I" -> {
+                Log.i(TAG, message, throwable)
+                FileLogger.writeLog(context, "INFO", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
+            }
+        }
+    }
 
     // QRコードや各種バーコードを全般的に読み取る設定
     val options = BarcodeScannerOptions.Builder()
@@ -37,6 +68,10 @@ fun OcrCameraView(
 
     var isProcessing by remember { mutableStateOf(false) }
 
+    // ▼ 同じコードの連続読み込みを防ぐための変数（警告が出ない mutableLongStateOf を使用）
+    var lastScannedText by remember { mutableStateOf<String?>(null) }
+    var lastScannedTime by remember { mutableLongStateOf(0L) }
+
     val previewView = remember {
         PreviewView(context).apply {
             scaleType = PreviewView.ScaleType.FILL_CENTER
@@ -45,11 +80,13 @@ fun OcrCameraView(
 
     DisposableEffect(Unit) {
         onDispose {
+            writeLog("D", "onDispose: カメラエグゼキュータをシャットダウンします")
             cameraExecutor.shutdown()
         }
     }
 
     LaunchedEffect(lifecycleOwner) {
+        writeLog("D", "LaunchedEffect: カメラプロバイダーの初期化を開始します")
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             try {
@@ -70,9 +107,29 @@ fun OcrCameraView(
                     }
                     isProcessing = true
 
-                    processBarcodeProxy(imageProxy, barcodeScanner, onTextScanned) {
-                        isProcessing = false
-                    }
+                    processBarcodeProxy(
+                        imageProxy = imageProxy,
+                        barcodeScanner = barcodeScanner,
+                        onTextScanned = { scannedText ->
+                            val currentTime = System.currentTimeMillis()
+
+                            // ▼ 同じQRコードが3秒以内に連続で検知された場合は無視する
+                            if (scannedText == lastScannedText && (currentTime - lastScannedTime) < 3000) {
+                                return@processBarcodeProxy
+                            }
+
+                            // 読み取り情報を更新
+                            lastScannedText = scannedText
+                            lastScannedTime = currentTime
+
+                            writeLog("I", "バーコード読み取り成功: scannedText=$scannedText")
+                            onTextScanned(scannedText)
+                        },
+                        onFinished = {
+                            isProcessing = false
+                        },
+                        writeLog = { level, msg, err -> writeLog(level, msg, err) }
+                    )
                 }
 
                 cameraProvider.unbindAll()
@@ -82,7 +139,9 @@ fun OcrCameraView(
                     preview,
                     imageAnalysis
                 )
+                writeLog("I", "カメラのライフサイクルバインドが完了しました")
             } catch (e: Exception) {
+                writeLog("E", "カメラプロバイダーの初期化中にエラーが発生しました", e)
                 e.printStackTrace()
             }
         }, ContextCompat.getMainExecutor(context))
@@ -99,7 +158,8 @@ private fun processBarcodeProxy(
     imageProxy: ImageProxy,
     barcodeScanner: com.google.mlkit.vision.barcode.BarcodeScanner,
     onTextScanned: (String) -> Unit,
-    onFinished: () -> Unit
+    onFinished: () -> Unit,
+    writeLog: (String, String, Throwable?) -> Unit
 ) {
     val mediaImage = imageProxy.image
     if (mediaImage != null) {
@@ -114,12 +174,15 @@ private fun processBarcodeProxy(
                     }
                 }
             }
-            .addOnFailureListener {}
+            .addOnFailureListener { e ->
+                writeLog("E", "BarcodeScanner processing failed", e)
+            }
             .addOnCompleteListener {
                 imageProxy.close()
                 onFinished()
             }
     } else {
+        writeLog("W", "mediaImage が null のため画像処理をスキップしました", null)
         imageProxy.close()
         onFinished()
     }

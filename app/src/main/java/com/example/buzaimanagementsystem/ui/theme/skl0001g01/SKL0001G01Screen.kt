@@ -2,10 +2,11 @@ package com.example.buzaimanagementsystem.ui.theme.skl0001g01
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,8 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-
-// 下半分に埋め込むカメラビューのインポート
 import com.example.buzaimanagementsystem.OcrCameraView
 
 @Composable
@@ -30,45 +29,87 @@ fun SKL0001G01Screen(
     onLoginSuccess: (userCd: String, userName: String, gymTntCd: String, gymTntMei: String) -> Unit
 ) {
     var userCd by remember { mutableStateOf("") }
-    // var isManualInput by remember { mutableStateOf(false) } // 【手入力復活時用】手動入力切替フラグ
-    var isCameraActive by remember { mutableStateOf(false) } // カメラ起動中フラグ
     val scrollState = rememberScrollState()
-
     val context = LocalContext.current
 
-    // カメラの実行時権限をリクエストするランチャー
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            if (viewModel.isSystemAvailable) {
-                isCameraActive = true
+    var lastScannedText by remember { mutableStateOf<String?>(null) }
+    var lastScannedTime by remember { mutableStateOf(0L) }
+
+    // Android 12以降の判定と必要な権限リストの作成
+    val isAndroid12Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val requiredPermissions = remember {
+        mutableListOf(Manifest.permission.CAMERA).apply {
+            if (isAndroid12Plus) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
             }
-        }
+        }.toTypedArray()
+    }
+
+    // すべての権限が許可されているかチェック
+    var hasAllPermissions by remember {
+        mutableStateOf(
+            requiredPermissions.all {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            }
+        )
+    }
+
+    // 複数権限を同時にリクエストするランチャー
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasAllPermissions = permissions.values.all { it }
     }
 
     LaunchedEffect(Unit) {
         viewModel.checkSystemAvailability()
+        if (!hasAllPermissions) {
+            permissionLauncher.launch(requiredPermissions)
+        }
     }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Column(
+        Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            // === 【上半分〜全体】：通常のログイン画面UI ===
+            // すべての権限（カメラ＋Bluetooth）が許可されている場合にカメラを起動
+            if (hasAllPermissions && viewModel.isSystemAvailable) {
+                Box(modifier = Modifier.size(1.dp)) {
+                    OcrCameraView(
+                        onTextScanned = { scannedText ->
+                            if (!viewModel.isSystemAvailable || viewModel.isLoggingIn) return@OcrCameraView
+
+                            val currentTime = System.currentTimeMillis()
+                            if (scannedText == lastScannedText && (currentTime - lastScannedTime) < 3000) {
+                                return@OcrCameraView
+                            }
+
+                            lastScannedText = scannedText
+                            lastScannedTime = currentTime
+
+                            val inputUser = scannedText.split("_", limit = 2)[0].trim()
+                            userCd = inputUser
+
+                            viewModel.executeLogin(scannedText) { uCd, userName, gymTntCd, gymTntMei ->
+                                onLoginSuccess(uCd, userName, gymTntCd, gymTntMei)
+                            }
+                        }
+                    )
+                }
+            }
+
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(if (isCameraActive) 0.5f else 1f)
+                    .fillMaxSize()
                     .verticalScroll(scrollState)
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // タイトル
                 Text(
                     text = "部材所在管理システム",
                     fontSize = 24.sp,
@@ -76,7 +117,6 @@ fun SKL0001G01Screen(
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
 
-                // メッセージボックス
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -86,13 +126,12 @@ fun SKL0001G01Screen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = viewModel.errorMessage ?: "ユーザーIDのバーコードを読み込んでください",
+                        text = viewModel.errorMessage ?: "ユーザーIDのQRコードを読み込んでください",
                         fontSize = 14.sp,
                         color = if (viewModel.errorMessage != null) MaterialTheme.colorScheme.error else Color.Black
                     )
                 }
 
-                // ユーザーID入力欄
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -100,105 +139,29 @@ fun SKL0001G01Screen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = "ユーザーID",
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 16.dp)
-                    )
+                    Text(text = "ユーザーID", fontSize = 16.sp, modifier = Modifier.padding(end = 16.dp))
 
-                    /* =========================================================
-                     * 【手入力機能（一時コメントアウト中）】
-                     * 将来的に手入力を再開する場合は、このコメントアウトを外し、
-                     * 下部のカメラ用Boxをコメントアウト（または切り替え）してください。
-                     * =========================================================
-                    if (isManualInput) {
-                        OutlinedTextField(
-                            value = userCd,
-                            onValueChange = { userCd = it },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(
-                                onDone = {
-                                    if (!viewModel.isSystemAvailable) {
-                                        return@KeyboardActions
-                                    }
-
-                                    val inputCodeOnly = if (userCd.contains("_")) {
-                                        userCd.substringBefore("_")
-                                    } else {
-                                        userCd
-                                    }
-                                    userCd = inputCodeOnly
-
-                                    viewModel.executeLogin(inputCodeOnly) { userCd, userName, gymTntCd, gymTntMei ->
-                                        onLoginSuccess(userCd, userName, gymTntCd, gymTntMei)
-                                    }
-                                }
-                            ),
-                            modifier = Modifier.width(200.dp)
-                        )
-                    } else {
-                    ========================================================= */
-
-                    // 通常時のバーコード読込用ボックス（タップでカメラ起動）
                     Box(
                         modifier = Modifier
                             .width(200.dp)
                             .height(56.dp)
-                            .border(1.dp, MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.small)
-                            .clickable {
-                                if (!viewModel.isSystemAvailable) {
-                                    return@clickable
-                                }
-
-                                when {
-                                    ContextCompat.checkSelfPermission(
-                                        context,
-                                        Manifest.permission.CAMERA
-                                    ) == PackageManager.PERMISSION_GRANTED -> {
-                                        isCameraActive = true
-                                    }
-                                    else -> {
-                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                    }
-                                }
-                            },
-                        contentAlignment = Alignment.Center
+                            .background(Color(0xFFD4E4F7), shape = MaterialTheme.shapes.small)
+                            .border(1.dp, Color.Black, shape = MaterialTheme.shapes.small)
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
-                            text = if (userCd.isEmpty()) "" else userCd,
+                            text = userCd,
                             fontSize = 16.sp,
-                            color = if (userCd.isEmpty()) Color.Gray else Color.Black
+                            color = if (userCd.isEmpty()) Color.Gray else Color.Black,
+                            maxLines = 1
                         )
                     }
-
-                    /* =========================================================
-                    } // <-- isManualInput の閉じ括弧 (コメントアウト中)
-                    ========================================================= */
                 }
 
-                /* =========================================================
-                 * 【緊急時用（手動入力切替）ボタン（一時コメントアウト中）】
-                TextButton(
-                    onClick = {
-                        isManualInput = !isManualInput
-                        isCameraActive = false
-                    },
-                    modifier = Modifier.padding(bottom = 24.dp)
-                ) {
-                    Text(
-                        text = if (isManualInput) "カメラ読込に戻す" else "緊急時用（手動入力）",
-                        fontSize = 14.sp
-                    )
-                }
-                ========================================================= */
-
-                // 閉じるボタン
                 Button(
                     onClick = onCloseApp,
-                    modifier = Modifier
-                        .width(130.dp)
-                        .height(48.dp),
+                    modifier = Modifier.width(130.dp).height(48.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(text = "閉じる", fontSize = 16.sp)
@@ -206,61 +169,12 @@ fun SKL0001G01Screen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 利用可能時間
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "利用可能時間",
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(end = 16.dp)
-                    )
-                    Text(
-                        text = viewModel.displayTime,
-                        fontSize = 20.sp
-                    )
-                }
-            }
-
-            // === 【下半分】：カメラ起動時のみ出現するエリア ===
-            if (isCameraActive) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.5f)
-                ) {
-                    OcrCameraView(
-                        onTextScanned = { scannedText ->
-                            if (!viewModel.isSystemAvailable) {
-                                isCameraActive = false
-                                return@OcrCameraView
-                            }
-
-                            val userCodeOnly = if (scannedText.contains("_")) {
-                                scannedText.substringBefore("_")
-                            } else {
-                                scannedText
-                            }
-
-                            isCameraActive = false
-                            userCd = userCodeOnly
-
-                            // カメラ読込によるログイン実行
-                            viewModel.executeLogin(userCodeOnly) { userCd, userName, gymTntCd, gymTntMei ->
-                                onLoginSuccess(userCd, userName, gymTntCd, gymTntMei)
-                            }
-                        }
-                    )
-
-                    Button(
-                        onClick = { isCameraActive = false },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                    ) {
-                        Text("閉じる")
-                    }
+                    Text(text = "利用可能時間", fontSize = 20.sp, modifier = Modifier.padding(end = 16.dp))
+                    Text(text = viewModel.displayTime, fontSize = 20.sp)
                 }
             }
         }

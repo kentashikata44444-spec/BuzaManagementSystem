@@ -8,16 +8,12 @@ plugins {
 
 android {
     namespace = "com.example.buzaimanagementsystem"
-    compileSdk {
-        version = release(37) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 37  // 👈 ここをシンプルに数値に変更します
 
     defaultConfig {
         applicationId = "com.example.buzaimanagementsystem"
         minSdk = 29
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
