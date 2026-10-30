@@ -401,7 +401,7 @@ class SKL0110G01ViewModel(
 
             } catch (e: Exception) {
                 writeLog("E", "保管BOX検証中に例外発生: ${e.message}", e)
-                boxMessage = "保管BOXの取得に失敗しました\nシステム管理者に連絡してください"
+                boxMessage = "データ取得に失敗しました\nシステム管理者に連絡してください"
             }
         }
     }
