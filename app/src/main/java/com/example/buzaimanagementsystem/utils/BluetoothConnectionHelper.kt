@@ -21,9 +21,7 @@ object BluetoothConnectionHelper {
     private var bluetoothGatt: BluetoothGatt? = null
     private var isConnectedState = false
 
-    // 連続して接続要求がスパムのように走るのを防ぐためのフラグ
     private var isConnecting = false
-
     private val handler = Handler(Looper.getMainLooper())
 
     private fun writeLog(context: Context, level: String, message: String, throwable: Throwable? = null) {
@@ -74,12 +72,41 @@ object BluetoothConnectionHelper {
         AppConfig.saveBleDeviceAddress(context, address)
     }
 
+    /**
+     * BLEデバイスとの接続を切断し、リソースを解放する（即時実行版）
+     */
+    @SuppressLint("MissingPermission")
+    fun disconnectDevice(context: Context) {
+        writeLog(context, "I", "disconnectDevice: BLEデバイスの切断処理を即時実行します")
+        try {
+            isConnecting = false
+            isConnectedState = false
+
+            bluetoothGatt?.let { gatt ->
+                try {
+                    gatt.disconnect()
+                } catch (e: Exception) {
+                    writeLog(context, "W", "disconnectDevice: gatt.disconnect() 失敗", e)
+                }
+                try {
+                    gatt.close()
+                } catch (e: Exception) {
+                    writeLog(context, "W", "disconnectDevice: gatt.close() 失敗", e)
+                }
+            }
+            bluetoothGatt = null
+            writeLog(context, "I", "disconnectDevice: BluetoothGatt の切断・クローズ処理が完了しました")
+        } catch (e: Exception) {
+            writeLog(context, "E", "disconnectDevice: 切断処理中に例外発生", e)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun connectToSavedDevice(
         context: Context,
         onConnectionStateChanged: (Boolean, String?) -> Unit,
         onDetailedError: ((String) -> Unit)? = null,
-        onDataReceived: ((String) -> Unit)? = null // バーコードデータ受信用コールバックを追加
+        onDataReceived: ((String) -> Unit)? = null
     ) {
         if (isConnecting) {
             writeLog(context, "W", "connectToSavedDevice: すでに接続処理中のためスキップします")
@@ -87,7 +114,7 @@ object BluetoothConnectionHelper {
         }
         isConnecting = true
 
-        writeLog(context, "I", "connectToSavedDevice: 呼び出し開始（詳細切り分け）")
+        writeLog(context, "I", "connectToSavedDevice: 呼び出し開始（タイムアウト延長版: 8秒）")
 
         val savedAddress = getSavedBleDeviceAddress(context)
         if (savedAddress.isNullOrEmpty()) {
@@ -101,7 +128,7 @@ object BluetoothConnectionHelper {
         if (!isBluetoothEnabled()) {
             isConnecting = false
             writeLog(context, "W", "connectToSavedDevice: BluetoothがOFFです")
-            onDetailedError?.invoke("エラー: BluetoothがOFFになっています")
+            onDetailedError?.invoke("Bluetoothがオフです\nBluetoothをオンにしてください")
             onConnectionStateChanged(false, null)
             return
         }
@@ -140,24 +167,24 @@ object BluetoothConnectionHelper {
                             override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
                                 super.onConnectionStateChange(gatt, status, newState)
                                 callbackTriggered = true
-                                isConnecting = false
                                 writeLog(context, "I", "onConnectionStateChange: status=$status, newState=$newState")
 
-                                if (status == 8 || (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED)) {
+                                if (status == 0 && newState == BluetoothProfile.STATE_CONNECTED) {
+                                    isConnecting = false
                                     writeLog(context, "I", "接続OK。サービス探索を開始します")
                                     isConnectedState = true
                                     onConnectionStateChanged(true, savedAddress)
-                                    // 接続成功したらGATTサービスを探索する
                                     gatt?.discoverServices()
                                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                                    isConnecting = false
                                     writeLog(context, "W", "デバイスが切断されました (STATE_DISCONNECTED)")
                                     isConnectedState = false
                                     onDetailedError?.invoke("ハードウェア異常 システム管理者に問合せ願います")
                                     onConnectionStateChanged(false, savedAddress)
-                                } else {
+                                } else if (status != 0) {
                                     isConnecting = false
                                     writeLog(context, "W", "接続エラー status=$status, newState=$newState")
-                                    onDetailedError?.invoke("ハードウェア異常 システム管理者に問合せ願います")
+                                    onDetailedError?.invoke("Bluetoothがオフです\nBluetoothをオンにしてください")
                                     isConnectedState = false
                                     onConnectionStateChanged(false, savedAddress)
                                 }
@@ -167,7 +194,6 @@ object BluetoothConnectionHelper {
                                 super.onServicesDiscovered(gatt, status)
                                 if (status == BluetoothGatt.GATT_SUCCESS && gatt != null) {
                                     writeLog(context, "I", "GATTサービス探索成功。通知設定を構成します")
-                                    // バーコードリーダーのデータ通知(Notification)を有効化
                                     for (service in gatt.services) {
                                         for (characteristic in service.characteristics) {
                                             val properties = characteristic.properties
@@ -176,7 +202,6 @@ object BluetoothConnectionHelper {
 
                                                 gatt.setCharacteristicNotification(characteristic, true)
 
-                                                // Client Characteristic Configuration Descriptor (CCCD) の書込み
                                                 val descriptorUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
                                                 val descriptor = characteristic.getDescriptor(descriptorUuid)
                                                 if (descriptor != null) {
@@ -203,10 +228,8 @@ object BluetoothConnectionHelper {
                                 super.onCharacteristicChanged(gatt, characteristic)
                                 val dataBytes = characteristic.value
                                 if (dataBytes != null && dataBytes.isNotEmpty()) {
-                                    val scannedText = String(dataBytes, Charsets.UTF_8).trim()
+                                    val scannedText = String(dataBytes, Charsets.UTF_8).trimEnd('\r', '\n')
                                     writeLog(context, "I", "バーコードデータ受信: $scannedText")
-
-                                    // メインスレッドでデータ受信コールバックを呼び出し
                                     handler.post {
                                         onDataReceived?.invoke(scannedText)
                                     }
@@ -216,11 +239,12 @@ object BluetoothConnectionHelper {
                         BluetoothDevice.TRANSPORT_LE
                     )
 
+                    // ★ タイムアウトを 8秒 に設定
                     handler.postDelayed({
                         if (!callbackTriggered && !isConnectedState) {
                             isConnecting = false
-                            writeLog(context, "W", "タイムアウト -> バーコードリーダーの電源がOFF")
-                            onDetailedError?.invoke("ハードウェア異常 システム管理者に問合せ願います")
+                            writeLog(context, "W", "タイムアウト -> バーコードリーダーの応答なし")
+                            onDetailedError?.invoke("バーコードリーダーの電源がオフです\nバーコードリーダーの電源をいれてください")
                             try {
                                 bluetoothGatt?.disconnect()
                                 bluetoothGatt?.close()
@@ -228,7 +252,7 @@ object BluetoothConnectionHelper {
                             bluetoothGatt = null
                             onConnectionStateChanged(false, savedAddress)
                         }
-                    }, 3000L)
+                    }, 8000L)
 
                 } catch (e: Exception) {
                     isConnecting = false

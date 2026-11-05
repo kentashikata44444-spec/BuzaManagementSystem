@@ -8,6 +8,19 @@ import retrofit2.http.Path
 
 import com.google.gson.annotations.SerializedName
 
+data class DeviceMappingDto(
+    @SerializedName("targetIpAddress", alternate = ["IP_ADS", "ipAds"])
+    val targetIpAddress: String?,
+
+    @SerializedName("targetMacAddress", alternate = ["MAC_ADS", "macAds"])
+    val targetMacAddress: String?,
+
+    @SerializedName("targetMeisho", alternate = ["MEISHO", "meisho", "HOZON_NM", "hozonNm"])
+    val targetMeisho: String?
+)
+
+// 既存の古いマスタ用Dtoは不要であればそのまま残しても構いませんが、
+// 今回のReader.txtキャッシュ用としては DeviceMappingDto を使用します。
 data class BarcodeReaderMasterDto(
     @SerializedName("HOZON_NM", alternate = ["hozonNm"])
     val HOZON_NM: String?,
@@ -39,7 +52,7 @@ interface SKL0001G01ApiService {
     @DELETE("api/SKL0001G01/login/{userCd}")
     suspend fun deleteLogin(@Path("userCd") userCd: String): SKL0001G01LoginResponse
 
-    // ▼ SAT_BCREADER_M マスタ取得用API
+    // ▼ 【修正】戻り値を List<BarcodeReaderMasterDto> から List<DeviceMappingDto> に変更！
     @GET("api/barcodereaders")
-    suspend fun getBarcodeReaderList(): List<BarcodeReaderMasterDto>
+    suspend fun getBarcodeReaderList(): List<DeviceMappingDto>
 }

@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,11 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.buzaimanagementsystem.OcrCameraView
 
 @Composable
 fun SKL0001G01Screen(
@@ -28,17 +30,13 @@ fun SKL0001G01Screen(
     onCloseApp: () -> Unit,
     onLoginSuccess: (userCd: String, userName: String, gymTntCd: String, gymTntMei: String) -> Unit
 ) {
-    var userCd by remember { mutableStateOf("") }
+    var rawInputText by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
     val context = LocalContext.current
 
-    var lastScannedText by remember { mutableStateOf<String?>(null) }
-    var lastScannedTime by remember { mutableStateOf(0L) }
-
-    // Android 12以降の判定と必要な権限リストの作成
     val isAndroid12Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val requiredPermissions = remember {
-        mutableListOf(Manifest.permission.CAMERA).apply {
+        mutableListOf<String>().apply {
             if (isAndroid12Plus) {
                 add(Manifest.permission.BLUETOOTH_SCAN)
                 add(Manifest.permission.BLUETOOTH_CONNECT)
@@ -46,7 +44,6 @@ fun SKL0001G01Screen(
         }.toTypedArray()
     }
 
-    // すべての権限が許可されているかチェック
     var hasAllPermissions by remember {
         mutableStateOf(
             requiredPermissions.all {
@@ -55,7 +52,6 @@ fun SKL0001G01Screen(
         )
     }
 
-    // 複数権限を同時にリクエストするランチャー
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -63,8 +59,11 @@ fun SKL0001G01Screen(
     }
 
     LaunchedEffect(Unit) {
+        viewModel.setLoginSuccessCallback { uCd, userName, gymTntCd, gymTntMei ->
+            onLoginSuccess(uCd, userName, gymTntCd, gymTntMei)
+        }
         viewModel.checkSystemAvailability()
-        if (!hasAllPermissions) {
+        if (!hasAllPermissions && requiredPermissions.isNotEmpty()) {
             permissionLauncher.launch(requiredPermissions)
         }
     }
@@ -76,31 +75,35 @@ fun SKL0001G01Screen(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            // すべての権限（カメラ＋Bluetooth）が許可されている場合にカメラを起動
-            if (hasAllPermissions && viewModel.isSystemAvailable) {
-                Box(modifier = Modifier.size(1.dp)) {
-                    OcrCameraView(
-                        onTextScanned = { scannedText ->
-                            if (!viewModel.isSystemAvailable || viewModel.isLoggingIn) return@OcrCameraView
-
-                            val currentTime = System.currentTimeMillis()
-                            if (scannedText == lastScannedText && (currentTime - lastScannedTime) < 3000) {
-                                return@OcrCameraView
-                            }
-
-                            lastScannedText = scannedText
-                            lastScannedTime = currentTime
-
-                            val inputUser = scannedText.split("_", limit = 2)[0].trim()
-                            userCd = inputUser
-
-                            viewModel.executeLogin(scannedText) { uCd, userName, gymTntCd, gymTntMei ->
+            OutlinedTextField(
+                value = rawInputText,
+                onValueChange = { newValue ->
+                    rawInputText = newValue
+                    if (newValue.contains("\n") || newValue.contains("\r")) {
+                        val textToProcess = rawInputText.trim()
+                        rawInputText = ""
+                        if (viewModel.isSystemAvailable && !viewModel.isLoggingIn && textToProcess.isNotEmpty()) {
+                            viewModel.executeLogin(textToProcess) { uCd, userName, gymTntCd, gymTntMei ->
                                 onLoginSuccess(uCd, userName, gymTntCd, gymTntMei)
                             }
                         }
-                    )
-                }
-            }
+                    }
+                },
+                modifier = Modifier.size(1.dp),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        val textToProcess = rawInputText.trim()
+                        rawInputText = ""
+                        if (viewModel.isSystemAvailable && !viewModel.isLoggingIn && textToProcess.isNotEmpty()) {
+                            viewModel.executeLogin(textToProcess) { uCd, userName, gymTntCd, gymTntMei ->
+                                onLoginSuccess(uCd, userName, gymTntCd, gymTntMei)
+                            }
+                        }
+                    }
+                )
+            )
 
             Column(
                 modifier = Modifier
@@ -151,16 +154,19 @@ fun SKL0001G01Screen(
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
-                            text = userCd,
+                            text = viewModel.inputUserCd,
                             fontSize = 16.sp,
-                            color = if (userCd.isEmpty()) Color.Gray else Color.Black,
+                            color = if (viewModel.inputUserCd.isEmpty()) Color.Gray else Color.Black,
                             maxLines = 1
                         )
                     }
                 }
 
                 Button(
-                    onClick = onCloseApp,
+                    onClick = {
+                        viewModel.disconnectBleDevice()
+                        onCloseApp()
+                    },
                     modifier = Modifier.width(130.dp).height(48.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {

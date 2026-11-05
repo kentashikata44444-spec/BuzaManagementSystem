@@ -2,6 +2,7 @@ package com.example.buzaimanagementsystem.ui.theme.skl0101g01
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -24,8 +25,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.buzaimanagementsystem.OcrCameraView
 import com.example.buzaimanagementsystem.R
+import com.example.buzaimanagementsystem.utils.AppConfig
+import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import com.example.buzaimanagementsystem.utils.FileLogger
 
 private const val TAG = "SKL0101G01Screen"
@@ -46,24 +48,60 @@ fun SKL0101G01Screen(
     // モーダルの表示・非表示を管理するステート
     var showHelpDialog by remember { mutableStateOf(false) }
 
-    var hasCameraPermission by remember {
+    // Android 12以降の判定と必要な権限リストの作成（BLE用）
+    val isAndroid12Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val requiredPermissions = remember {
+        mutableListOf<String>().apply {
+            if (isAndroid12Plus) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }.toTypedArray()
+    }
+
+    var hasAllPermissions by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            requiredPermissions.all {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            }
         )
     }
 
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasCameraPermission = isGranted
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasAllPermissions = permissions.values.all { it }
     }
 
     LaunchedEffect(userCd, gymTntCd, gymTntMei, sourceDivision) {
         FileLogger.writeLog(context, "DEBUG", TAG, "画面初期化パラメータ受信: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei, sourceDivision=$sourceDivision")
         viewModel.initParams(userCd, gymTntCd, gymTntMei, sourceDivision)
         viewModel.clearInput()
-        if (!hasCameraPermission) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+
+        if (!hasAllPermissions && requiredPermissions.isNotEmpty()) {
+            permissionLauncher.launch(requiredPermissions)
+        }
+
+        // ▼ カメラの代わりにBLEバーコードリーダー接続を維持・初期化
+        val savedAddress = AppConfig.getSavedBleDeviceAddress(context)
+        if (!savedAddress.isNullOrBlank()) {
+            BluetoothConnectionHelper.connectToSavedDevice(
+                context = context,
+                onConnectionStateChanged = { isConnected, address ->
+                    FileLogger.writeLog(context, "INFO", TAG, "BLE接続状態変更: isConnected=$isConnected, address=$address")
+                },
+                onDetailedError = { err ->
+                    FileLogger.writeLog(context, "WARN", TAG, "BLE接続エラー: $err")
+                },
+                onDataReceived = { scannedText ->
+                    FileLogger.writeLog(context, "INFO", TAG, "BLEデータ受信: $scannedText")
+                    if (scannedText.isNotBlank()) {
+                        viewModel.processScannedCode(scannedText) { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
+                            onNavigateToShitei(uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv)
+                        }
+                    }
+                }
+            )
         }
     }
 
@@ -76,14 +114,13 @@ fun SKL0101G01Screen(
                 .fillMaxSize()
                 .background(Color.White)
         ) {
-            // === 裏で常にカメラを起動して自動スキャンさせる ===
+            /* === カメラによる自動スキャン部分はコメントアウトしました ===
             if (hasCameraPermission) {
                 Box(
                     modifier = Modifier.size(1.dp)
                 ) {
                     OcrCameraView(
                         onTextScanned = { scannedText ->
-                            // ▼ 8つの引数を受け取るように修正します
                             viewModel.processScannedCode(scannedText) { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
                                 onNavigateToShitei(uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv)
                             }
@@ -91,8 +128,9 @@ fun SKL0101G01Screen(
                     )
                 }
             }
+            =========================================================== */
 
-            // === 通常の仕分け画面UI（他画面とパディング等を統一） ===
+            // === 通常の仕分け画面UI ===
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -226,7 +264,7 @@ fun SKL0101G01Screen(
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
-                            text = "※『保管BOX』または『保管資材』の\n    QRを読み込んでください",
+                            text = "※『保管BOX』または『保管資材』の\n    バーコードを読み込んでください",
                             fontSize = 14.sp,
                             color = Color.Black,
                             textAlign = TextAlign.Start
@@ -284,7 +322,6 @@ fun SKL0101G01Screen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(text = "保管資材", fontSize = 16.sp, color = Color.Black)
-                            // ▼ 「？」ボタンをタップしたらモーダルを表示するよう変更
                             Box(
                                 modifier = Modifier
                                     .size(20.dp)
@@ -354,7 +391,6 @@ fun SKL0101G01Screen(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // コンビテナ
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "コンビテナ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -365,7 +401,6 @@ fun SKL0101G01Screen(
                                 )
                             }
 
-                            // パレット
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "パレット", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -376,7 +411,6 @@ fun SKL0101G01Screen(
                                 )
                             }
 
-                            // 台車
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -396,7 +430,6 @@ fun SKL0101G01Screen(
                                 }
                             }
 
-                            // 棚
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
