@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import com.example.buzaimanagementsystem.utils.FileLogger
 import kotlinx.coroutines.launch
 
@@ -53,6 +54,21 @@ class SKL0002G01ViewModel(
                 FileLogger.writeLog(context, "INFO", TAG, message + (throwable?.let { " : ${it.message}" } ?: ""))
             }
         }
+    }
+
+    /**
+     * BLEデバイスとの接続を切断し、リソースを解放する
+     */
+    fun disconnectBleDevice() {
+        val context = getApplication<Application>()
+        writeLog("I", "disconnectBleDevice: メインメニューからBLE切断処理を実行します")
+        BluetoothConnectionHelper.disconnectDevice(context)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // ViewModel破棄時に自動で切断処理を走らせる
+        disconnectBleDevice()
     }
 
     /**
@@ -111,6 +127,8 @@ class SKL0002G01ViewModel(
      */
     fun onExitClicked(onExit: () -> Unit) {
         writeLog("I", "onExitClicked: 終了処理を実行します")
+        // ★ 終了ボタンが押されたときにも確実にBLE切断を実行する
+        disconnectBleDevice()
         viewModelScope.launch { onExit() }
     }
 }

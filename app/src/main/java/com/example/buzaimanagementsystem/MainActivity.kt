@@ -48,12 +48,9 @@ import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ViewModel
 import com.example.buzaimanagementsystem.utils.CommonApiService
 import com.example.buzaimanagementsystem.utils.FileLogger
 import com.example.buzaimanagementsystem.utils.performLogoutAndExit
-import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -101,32 +98,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BuzaiManagementSystemTheme {
-                // === アプリ起動時にBLEデバイスの接続をバックグラウンドで1度だけ試行する ===
-                LaunchedEffect(Unit) {
-                    val context = applicationContext
-                    val savedAddress = BluetoothConnectionHelper.getSavedBleDeviceAddress(context)
-                    if (!savedAddress.isNullOrEmpty()) {
-                        writeLog("I", "アプリ起動時: 保存されたBLEアドレス ($savedAddress) のバックグラウンド接続を開始します")
-
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                            if (!BluetoothConnectionHelper.isBleConnected(context, savedAddress)) {
-                                BluetoothConnectionHelper.connectToSavedDevice(
-                                    context = context,
-                                    onConnectionStateChanged = { isConnected, address ->
-                                        writeLog("I", "アプリ起動時バックグラウンド接続コールバック: isConnected=$isConnected, address=$address")
-                                    },
-                                    onDetailedError = { detailedMessage ->
-                                        writeLog("W", "アプリ起動時BLEエラー: $detailedMessage")
-                                    }
-                                )
-                            } else {
-                                writeLog("I", "アプリ起動時: すでにBLE機器は接続されています")
-                            }
-                        }
-                    } else {
-                        writeLog("I", "アプリ起動時: 保存されたBLEアドレスはありません")
-                    }
-                }
+                // MainActivity側での二重のBLE接続試行処理は完全に削除しました。
+                // 接続処理は SKL0001G01ViewModel の checkSystemAvailability() 内で一元管理されます。
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
