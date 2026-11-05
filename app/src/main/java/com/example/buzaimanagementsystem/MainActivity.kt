@@ -45,6 +45,7 @@ import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01ViewModel
 import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01Screen
 import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ApiService
 import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ViewModel as SKL0111ViewModel
+import com.example.buzaimanagementsystem.utils.AppConfig
 import com.example.buzaimanagementsystem.utils.CommonApiService
 import com.example.buzaimanagementsystem.utils.FileLogger
 import com.example.buzaimanagementsystem.utils.performLogoutAndExit
@@ -83,8 +84,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         writeLog("D", "onCreate: MainActivity が起動しました")
 
-        val serverUrl = BuildConfig.SERVER_URL
-        writeLog("I", "onCreate: 設定された通信先サーバーURL (BuildConfig.SERVER_URL) = $serverUrl")
+        // ▼ AppConfig を通じてアプリ専用外部ストレージから動的にサーバーURLを取得
+        val rawServerUrl = AppConfig.getServerUrl(applicationContext)
+        writeLog("I", "【設定ファイル調査】AppConfig.getServerUrl() の返り値 = [$rawServerUrl]")
+
+        val serverUrl = if (rawServerUrl.isBlank()) {
+            writeLog("E", "onCreate: サーバーURLの取得に失敗しました。設定ファイルの配置を確認してください。")
+            "http://192.168.137.1:8080/" // フォールバック用デフォルト
+        } else {
+            if (rawServerUrl.endsWith("/")) rawServerUrl else "$rawServerUrl/"
+        }
+
+        writeLog("I", "onCreate: 適用された通信先サーバーURL = $serverUrl")
 
         val retrofit = Retrofit.Builder()
             .baseUrl(serverUrl)
@@ -98,9 +109,6 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BuzaiManagementSystemTheme {
-                // MainActivity側での二重のBLE接続試行処理は完全に削除しました。
-                // 接続処理は SKL0001G01ViewModel の checkSystemAvailability() 内で一元管理されます。
-
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

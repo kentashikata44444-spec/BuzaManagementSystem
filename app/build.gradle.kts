@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.example.buzaimanagementsystem"
-    compileSdk = 37  // 👈 ここをシンプルに数値に変更します
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.buzaimanagementsystem"
@@ -18,18 +18,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // ▼ local.properties から動的に SERVER_URL を読み込む設定
-        val localProperties = Properties()
-        val localFile = rootProject.file("local.properties")
-        if (localFile.exists()) {
-            FileInputStream(localFile).use { stream ->
-                localProperties.load(stream)
-            }
-        }
-        val serverUrl = localProperties.getProperty("SERVER_URL") ?: "http://10.0.2.2:8080/"
-        // ↓ ダブルクォーテーションを綺麗にエスケープする
-        buildConfigField("String", "SERVER_URL", "\"$serverUrl\"")
+        // 🗑 local.properties からの SERVER_URL 読み込みおよび buildConfigField は削除しました
     }
 
     buildTypes {
@@ -47,7 +36,8 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true // 👈 BuildConfigを有効化
+        // BuildConfig を自動生成する必要がなくなった場合は false（または削除）にできます
+        buildConfig = false
     }
 }
 
@@ -82,12 +72,12 @@ dependencies {
     // AppCompat 関連 (AppCompatActivityを使うために必要)
     implementation("androidx.appcompat:appcompat:1.6.1")
 
-    // ▼▼▼【追加】不足している CameraX のモジュール ▼▼▼
+    // CameraX のモジュール
     val cameraxVersion = "1.3.1"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    implementation("com.google.mlkit:barcode-scanning:17.3.0") // バージョンは最新または既存のmlkitに合わせる
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 }

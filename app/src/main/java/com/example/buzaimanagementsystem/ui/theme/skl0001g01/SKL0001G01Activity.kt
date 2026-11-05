@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import com.example.buzaimanagementsystem.ui.theme.BuzaiManagementSystemTheme
-import com.example.buzaimanagementsystem.BuildConfig
+import com.example.buzaimanagementsystem.utils.AppConfig // 👈 追加
 import com.example.buzaimanagementsystem.utils.FileLogger
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -17,13 +17,22 @@ class SKL0001G01Activity : ComponentActivity() {
         private const val TAG = "SKL0001G01Activity"
     }
 
-    // ▼ AndroidViewModelに対応させ、ApplicationとapiServiceを渡すFactory構成に修正
+    // ▼ Documents/server_config から動的にサーバーURLを読み込んでRetrofitを生成
     private val viewModel: SKL0001G01ViewModel by viewModels {
         object : androidx.lifecycle.ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                 Log.d(TAG, "ViewModel Factory: SKL0001G01ViewModel を生成します")
+
+                val rawServerUrl = AppConfig.getServerUrl(application)
+                val serverUrl = if (rawServerUrl.isBlank()) {
+                    Log.e(TAG, "サーバーURLの取得に失敗しました。デフォルト値を使用します。")
+                    "http://192.168.137.1:8080/"
+                } else {
+                    if (rawServerUrl.endsWith("/")) rawServerUrl else "$rawServerUrl/"
+                }
+
                 val retrofit = Retrofit.Builder()
-                    .baseUrl(BuildConfig.SERVER_URL)
+                    .baseUrl(serverUrl)
                     .addConverterFactory(GsonConverterFactory.create())
                     .build()
                 val apiService = retrofit.create(SKL0001G01ApiService::class.java)
