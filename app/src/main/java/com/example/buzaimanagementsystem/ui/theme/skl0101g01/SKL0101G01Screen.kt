@@ -29,6 +29,7 @@ import com.example.buzaimanagementsystem.R
 import com.example.buzaimanagementsystem.utils.AppConfig
 import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import com.example.buzaimanagementsystem.utils.FileLogger
+import com.example.buzaimanagementsystem.utils.SwipeWarningBox // ★ 追加
 
 private const val TAG = "SKL0101G01Screen"
 
@@ -105,344 +106,331 @@ fun SKL0101G01Screen(
         }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White)
+    // ★ 一番外側を SwipeWarningBox で包み込む
+    SwipeWarningBox {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
         ) {
-            /* === カメラによる自動スキャン部分はコメントアウトしました ===
-            if (hasCameraPermission) {
-                Box(
-                    modifier = Modifier.size(1.dp)
-                ) {
-                    OcrCameraView(
-                        onTextScanned = { scannedText ->
-                            viewModel.processScannedCode(scannedText) { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
-                                onNavigateToShitei(uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv)
-                            }
-                        }
-                    )
-                }
-            }
-            =========================================================== */
-
-            // === 通常の仕分け画面UI ===
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Top,
-                horizontalAlignment = Alignment.Start
+                    .background(Color.White)
             ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // ==========================================
-                // 上部ヘッダー（3段構成）
-                // ==========================================
-
-                // 1段目：業務担当名（右寄せ）
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                // === 通常の仕分け画面UI ===
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
-                    Text(
-                        text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
-                        fontSize = 14.sp,
-                        color = Color.Black
-                    )
-                }
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    // ==========================================
+                    // 上部ヘッダー（3段構成）
+                    // ==========================================
 
-                // 2段目：タイトルと下線
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start
-                ) {
-                    Column(
-                        modifier = Modifier.width(IntrinsicSize.Max)
+                    // 1段目：業務担当名（右寄せ）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
+                        val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
                         Text(
-                            text = "仕分け",
-                            fontSize = 22.sp,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black,
-                            maxLines = 1
+                            text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
+                            fontSize = 14.sp,
+                            color = Color.Black
                         )
-                        Text(
-                            text = "(保管BOX・保管資材確定)",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black,
-                            maxLines = 1
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 2段目：タイトルと下線
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start
+                    ) {
+                        Column(
+                            modifier = Modifier.width(IntrinsicSize.Max)
+                        ) {
+                            Text(
+                                text = "仕分け",
+                                fontSize = 22.sp,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "(保管BOX・保管資材確定)",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(2.dp)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 3段目：仕分け・一時保管メニューボタン（右寄せ・グレー＆黒枠）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Button(
+                            onClick = {
+                                FileLogger.writeLog(context, "DEBUG", TAG, "仕分け・一時保管メニューボタン押下: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei")
+                                onNavigateToMenu(userCd, gymTntCd, gymTntMei)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = "仕分け・一時保管メニュー",
+                                color = Color.Black,
+                                fontSize = 14.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    // ==========================================
+
+                    // エラーメッセージ表示エリア
+                    if (viewModel.errorMessage != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(2.dp)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
+                                .background(Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp))
+                                .padding(8.dp)
+                        ) {
+                            Text(
+                                text = viewModel.errorMessage!!,
+                                color = Color.Red,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 3段目：仕分け・一時保管メニューボタン（右寄せ・グレー＆黒枠）
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    Button(
-                        onClick = {
-                            FileLogger.writeLog(context, "DEBUG", TAG, "仕分け・一時保管メニューボタン押下: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei")
-                            onNavigateToMenu(userCd, gymTntCd, gymTntMei)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
-                    ) {
-                        Text(
-                            text = "仕分け・一時保管メニュー",
-                            color = Color.Black,
-                            fontSize = 14.sp,
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                // ==========================================
-
-                // エラーメッセージ表示エリア
-                if (viewModel.errorMessage != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp))
-                            .padding(8.dp)
-                    ) {
-                        Text(
-                            text = viewModel.errorMessage!!,
-                            color = Color.Red,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                // インフォメッセージ表示エリア
-                if (viewModel.infoMessage != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFE8F5E9), shape = RoundedCornerShape(4.dp))
-                            .padding(8.dp)
-                    ) {
-                        Text(
-                            text = viewModel.infoMessage!!,
-                            color = Color(0xFF2E7D32),
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(
-                            text = "※『保管BOX』または『保管資材』の\n    バーコードを読み込んでください",
-                            fontSize = 14.sp,
-                            color = Color.Black,
-                            textAlign = TextAlign.Start
-                        )
+                    // インフォメッセージ表示エリア
+                    if (viewModel.infoMessage != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFE8F5E9), shape = RoundedCornerShape(4.dp))
+                                .padding(8.dp)
+                        ) {
+                            Text(
+                                text = viewModel.infoMessage!!,
+                                color = Color(0xFF2E7D32),
+                                fontSize = 13.sp
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // 保管BOX入力欄
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "保管BOX",
-                            fontSize = 16.sp,
-                            modifier = Modifier.width(90.dp),
-                            color = Color.Black
-                        )
-
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .background(Color(0xFFD4E4F7), shape = RoundedCornerShape(4.dp))
-                                .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
-                                .padding(horizontal = 12.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Text(
-                                text = viewModel.hokanBoxCode,
-                                fontSize = 16.sp,
-                                color = if (viewModel.hokanBoxCode.isEmpty()) Color.Gray else Color.Black,
-                                maxLines = 1
+                                text = "※『保管BOX』または『保管資材』の\n    バーコードを読み込んでください",
+                                fontSize = 14.sp,
+                                color = Color.Black,
+                                textAlign = TextAlign.Start
                             )
                         }
-                    }
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "または", fontSize = 14.sp, color = Color.Black)
-                    }
+                        Spacer(modifier = Modifier.height(24.dp))
 
-                    // 保管資材入力欄
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier.width(90.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "保管資材", fontSize = 16.sp, color = Color.Black)
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .background(Color.Black, shape = RoundedCornerShape(10.dp))
-                                    .clickable { showHelpDialog = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(text = "?", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .background(Color(0xFFD4E4F7), shape = RoundedCornerShape(4.dp))
-                                .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
-                                .padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(
-                                text = viewModel.hokanShizaiCode,
-                                fontSize = 16.sp,
-                                color = if (viewModel.hokanShizaiCode.isEmpty()) Color.Gray else Color.Black,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
-
-            // === 保管資材説明モーダル（AlertDialog） ===
-            if (showHelpDialog) {
-                AlertDialog(
-                    onDismissRequest = { showHelpDialog = false },
-                    containerColor = Color.White,
-                    shape = RoundedCornerShape(8.dp),
-                    title = {
+                        // 保管BOX入力欄
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "保管資材",
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = "保管BOX",
+                                fontSize = 16.sp,
+                                modifier = Modifier.width(90.dp),
                                 color = Color.Black
                             )
-                            Button(
-                                onClick = { showHelpDialog = false },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .background(Color(0xFFD4E4F7), shape = RoundedCornerShape(4.dp))
+                                    .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart
                             ) {
-                                Text(text = "閉じる", color = Color.Black, fontSize = 14.sp)
+                                Text(
+                                    text = viewModel.hokanBoxCode,
+                                    fontSize = 16.sp,
+                                    color = if (viewModel.hokanBoxCode.isEmpty()) Color.Gray else Color.Black,
+                                    maxLines = 1
+                                )
                             }
                         }
-                    },
-                    text = {
-                        Column(
+
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(450.dp)
-                                .verticalScroll(rememberScrollState())
-                                .padding(vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "コンビテナ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Image(
-                                    painter = painterResource(id = R.drawable.conbitena),
-                                    contentDescription = "コンビテナ",
-                                    modifier = Modifier.size(150.dp)
-                                )
-                            }
+                            Text(text = "または", fontSize = 14.sp, color = Color.Black)
+                        }
 
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "パレット", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Image(
-                                    painter = painterResource(id = R.drawable.palette),
-                                    contentDescription = "パレット",
-                                    modifier = Modifier.size(150.dp)
-                                )
-                            }
-
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        // 保管資材入力欄
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.width(90.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "保管資材", fontSize = 16.sp, color = Color.Black)
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .background(Color.Black, shape = RoundedCornerShape(10.dp))
+                                        .clickable { showHelpDialog = true },
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Image(
-                                        painter = painterResource(id = R.drawable.daisha1),
-                                        contentDescription = "台車1",
-                                        modifier = Modifier.size(120.dp)
-                                    )
-                                    Image(
-                                        painter = painterResource(id = R.drawable.daisha2),
-                                        contentDescription = "台車2",
-                                        modifier = Modifier.size(120.dp)
-                                    )
+                                    Text(text = "?", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Image(
-                                    painter = painterResource(id = R.drawable.tana),
-                                    contentDescription = "棚",
-                                    modifier = Modifier.size(150.dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .background(Color(0xFFD4E4F7), shape = RoundedCornerShape(4.dp))
+                                    .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(
+                                    text = viewModel.hokanShizaiCode,
+                                    fontSize = 16.sp,
+                                    color = if (viewModel.hokanShizaiCode.isEmpty()) Color.Gray else Color.Black,
+                                    maxLines = 1
                                 )
                             }
                         }
-                    },
-                    confirmButton = {}
-                )
+                    }
+                }
+
+                // === 保管資材説明モーダル（AlertDialog） ===
+                if (showHelpDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showHelpDialog = false },
+                        containerColor = Color.White,
+                        shape = RoundedCornerShape(8.dp),
+                        title = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "保管資材",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                                Button(
+                                    onClick = { showHelpDialog = false },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                ) {
+                                    Text(text = "閉じる", color = Color.Black, fontSize = 14.sp)
+                                }
+                            }
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(450.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "コンビテナ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Image(
+                                        painter = painterResource(id = R.drawable.conbitena),
+                                        contentDescription = "コンビテナ",
+                                        modifier = Modifier.size(150.dp)
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "パレット", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Image(
+                                        painter = painterResource(id = R.drawable.palette),
+                                        contentDescription = "パレット",
+                                        modifier = Modifier.size(150.dp)
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.daisha1),
+                                            contentDescription = "台車1",
+                                            modifier = Modifier.size(120.dp)
+                                        )
+                                        Image(
+                                            painter = painterResource(id = R.drawable.daisha2),
+                                            contentDescription = "台車2",
+                                            modifier = Modifier.size(120.dp)
+                                        )
+                                    }
+                                }
+
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Image(
+                                        painter = painterResource(id = R.drawable.tana),
+                                        contentDescription = "棚",
+                                        modifier = Modifier.size(150.dp)
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {}
+                    )
+                }
             }
         }
     }

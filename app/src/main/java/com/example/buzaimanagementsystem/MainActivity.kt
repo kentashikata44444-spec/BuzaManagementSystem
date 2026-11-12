@@ -1,7 +1,11 @@
 package com.example.buzaimanagementsystem
 
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,9 +49,12 @@ import com.example.buzaimanagementsystem.ui.theme.skl0110g01.SKL0110G01ViewModel
 import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01Screen
 import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ApiService
 import com.example.buzaimanagementsystem.ui.theme.skl0111g01.SKL0111G01ViewModel as SKL0111ViewModel
+import com.example.buzaimanagementsystem.utils.AppConfig
 import com.example.buzaimanagementsystem.utils.CommonApiService
 import com.example.buzaimanagementsystem.utils.FileLogger
 import com.example.buzaimanagementsystem.utils.performLogoutAndExit
+// ★ 共通の長押し・上スワイプ注意喚起ラッパー
+import com.example.buzaimanagementsystem.utils.SwipeWarningBox
 
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -83,8 +90,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         writeLog("D", "onCreate: MainActivity が起動しました")
 
-        val serverUrl = BuildConfig.SERVER_URL
-        writeLog("I", "onCreate: 設定された通信先サーバーURL (BuildConfig.SERVER_URL) = $serverUrl")
+        // ▼ AppConfig を通じてアプリ専用外部ストレージから動的にサーバーURLを取得
+        val rawServerUrl = AppConfig.getServerUrl(applicationContext)
+        writeLog("I", "【設定ファイル調査】AppConfig.getServerUrl() の返り値 = [$rawServerUrl]")
+
+        val serverUrl = if (rawServerUrl.isBlank()) {
+            writeLog("E", "onCreate: サーバーURLの取得に失敗しました。設定ファイルの配置を確認してください。")
+            "http://192.168.137.1:8080/" // フォールバック用デフォルト
+        } else {
+            if (rawServerUrl.endsWith("/")) rawServerUrl else "$rawServerUrl/"
+        }
+
+        writeLog("I", "onCreate: 適用された通信先サーバーURL = $serverUrl")
 
         val retrofit = Retrofit.Builder()
             .baseUrl(serverUrl)
@@ -98,299 +115,297 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BuzaiManagementSystemTheme {
-                // MainActivity側での二重のBLE接続試行処理は完全に削除しました。
-                // 接続処理は SKL0001G01ViewModel の checkSystemAvailability() 内で一元管理されます。
+                // ★ 全画面を SwipeWarningBox で包み込むことで、どの画面にいても長押し・上スワイプで警告が出るようにする
+                SwipeWarningBox {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        var currentScreen by remember { mutableStateOf("login") }
 
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    var currentScreen by remember { mutableStateOf("login") }
+                        var loginUserCd by remember { mutableStateOf("") }
+                        var loginUserName by remember { mutableStateOf("") }
+                        var gymTntCd by remember { mutableStateOf("") }
+                        var gymTntMei by remember { mutableStateOf("") }
+                        var selectedSourceDiv by remember { mutableStateOf("1") }
 
-                    var loginUserCd by remember { mutableStateOf("") }
-                    var loginUserName by remember { mutableStateOf("") }
-                    var gymTntCd by remember { mutableStateOf("") }
-                    var gymTntMei by remember { mutableStateOf("") }
-                    var selectedSourceDiv by remember { mutableStateOf("1") }
+                        // SKL0101から引き継ぐ選択値用の状態
+                        var selectedChubunruiCode by remember { mutableStateOf("") }
+                        var selectedChubunruiName by remember { mutableStateOf("") }
+                        var selectedShobunruiCode by remember { mutableStateOf("") }
+                        var selectedShobunruiName by remember { mutableStateOf("") }
 
-                    // SKL0101から引き継ぐ選択値用の状態
-                    var selectedChubunruiCode by remember { mutableStateOf("") }
-                    var selectedChubunruiName by remember { mutableStateOf("") }
-                    var selectedShobunruiCode by remember { mutableStateOf("") }
-                    var selectedShobunruiName by remember { mutableStateOf("") }
+                        // SKL0104からSKL0110へ引き継ぐ製品No
+                        var selectedSeihinBango by remember { mutableStateOf("") }
 
-                    // SKL0104からSKL0110へ引き継ぐ製品No
-                    var selectedSeihinBango by remember { mutableStateOf("") }
-
-                    when (currentScreen) {
-                        "login" -> {
-                            SKL0001G01Screen(
-                                viewModel = viewModel,
-                                onCloseApp = { finish() },
-                                onLoginSuccess = { userCd, userName, tntCd, tntMei ->
-                                    loginUserCd = userCd
-                                    loginUserName = userName
-                                    gymTntCd = tntCd
-                                    gymTntMei = tntMei
-                                    currentScreen = "menu"
-                                }
-                            )
-                        }
-
-                        "menu" -> {
-                            val menuViewModel: SKL0002ViewModel = viewModel()
-
-                            LaunchedEffect(loginUserCd, gymTntCd) {
-                                if (loginUserCd.isNotEmpty()) {
-                                    menuViewModel.initUserData(
-                                        userCd = loginUserCd,
-                                        userName = loginUserName,
-                                        gymTntCd = gymTntCd,
-                                        gymTntMei = gymTntMei
-                                    )
-                                }
+                        when (currentScreen) {
+                            "login" -> {
+                                SKL0001G01Screen(
+                                    viewModel = viewModel,
+                                    onCloseApp = { finish() },
+                                    onLoginSuccess = { userCd, userName, tntCd, tntMei ->
+                                        loginUserCd = userCd
+                                        loginUserName = userName
+                                        gymTntCd = tntCd
+                                        gymTntMei = tntMei
+                                        currentScreen = "menu"
+                                    }
+                                )
                             }
 
-                            SKL0002G01Screen(
-                                viewModel = menuViewModel,
-                                userCd = loginUserCd,
-                                userName = loginUserName,
-                                gymTntCd = gymTntCd,
-                                gymTntMei = gymTntMei,
-                                onNavigateToShiwake = { _, _, _ ->
-                                    currentScreen = "shiwake_menu"
-                                },
-                                onNavigateToShuyaku = {},
-                                onNavigateToHikiwatashi = {},
-                                onNavigateToHenkyaku = {},
-                                onNavigateToKobetsu = {},
-                                onExitApp = {
-                                    performLogoutAndExit(
-                                        coroutineScope = lifecycleScope,
-                                        apiService = commonApiService,
-                                        userCd = viewModel.loggedInUserCd,
-                                        onExit = { finish() }
-                                    )
+                            "menu" -> {
+                                val menuViewModel: SKL0002ViewModel = viewModel()
+
+                                LaunchedEffect(loginUserCd, gymTntCd) {
+                                    if (loginUserCd.isNotEmpty()) {
+                                        menuViewModel.initUserData(
+                                            userCd = loginUserCd,
+                                            userName = loginUserName,
+                                            gymTntCd = gymTntCd,
+                                            gymTntMei = gymTntMei
+                                        )
+                                    }
                                 }
-                            )
-                        }
 
-                        "shiwake_menu" -> {
-                            val shiwakeViewModel: SKL0100ViewModel = viewModel()
-                            SKL0100G01Screen(
-                                viewModel = shiwakeViewModel,
-                                userCd = loginUserCd,
-                                gymTntCd = gymTntCd,
-                                gymTntMei = gymTntMei,
-                                onNavigateToMain = { _, _, _ ->
-                                    currentScreen = "menu"
-                                },
-                                onNavigateToKobeTsukuba = { _, _, _, sourceDiv ->
-                                    selectedSourceDiv = sourceDiv
-                                    currentScreen = "shiwake"
-                                },
-                                onNavigateToSuzuka = { _, _, _, sourceDiv ->
-                                    selectedSourceDiv = sourceDiv
-                                    currentScreen = "shiwake"
-                                },
-                                onNavigateToKatsueiWarehouse = { _, _, _, sourceDiv ->
-                                    selectedSourceDiv = sourceDiv
-                                    currentScreen = "shiwake"
-                                }
-                            )
-                        }
+                                SKL0002G01Screen(
+                                    viewModel = menuViewModel,
+                                    userCd = loginUserCd,
+                                    userName = loginUserName,
+                                    gymTntCd = gymTntCd,
+                                    gymTntMei = gymTntMei,
+                                    onNavigateToShiwake = { _, _, _ ->
+                                        currentScreen = "shiwake_menu"
+                                    },
+                                    onNavigateToShuyaku = {},
+                                    onNavigateToHikiwatashi = {},
+                                    onNavigateToHenkyaku = {},
+                                    onNavigateToKobetsu = {},
+                                    onExitApp = {
+                                        performLogoutAndExit(
+                                            coroutineScope = lifecycleScope,
+                                            apiService = commonApiService,
+                                            userCd = viewModel.loggedInUserCd,
+                                            onExit = { finish() }
+                                        )
+                                    }
+                                )
+                            }
 
-                        "shiwake" -> {
-                            var subScreen by remember { mutableStateOf("scan") }
+                            "shiwake_menu" -> {
+                                val shiwakeViewModel: SKL0100ViewModel = viewModel()
+                                SKL0100G01Screen(
+                                    viewModel = shiwakeViewModel,
+                                    userCd = loginUserCd,
+                                    gymTntCd = gymTntCd,
+                                    gymTntMei = gymTntMei,
+                                    onNavigateToMain = { _, _, _ ->
+                                        currentScreen = "menu"
+                                    },
+                                    onNavigateToKobeTsukuba = { _, _, _, sourceDiv ->
+                                        selectedSourceDiv = sourceDiv
+                                        currentScreen = "shiwake"
+                                    },
+                                    onNavigateToSuzuka = { _, _, _, sourceDiv ->
+                                        selectedSourceDiv = sourceDiv
+                                        currentScreen = "shiwake"
+                                    },
+                                    onNavigateToKatsueiWarehouse = { _, _, _, sourceDiv ->
+                                        selectedSourceDiv = sourceDiv
+                                        currentScreen = "shiwake"
+                                    }
+                                )
+                            }
 
-                            when (subScreen) {
-                                "skl0110" -> {
-                                    val skl0110ApiService =
-                                        retrofit.create(SKL0110G01ApiService::class.java)
-                                    val skl0110ViewModel = remember(
-                                        loginUserCd,
-                                        gymTntCd,
-                                        gymTntMei,
-                                        selectedSourceDiv,
-                                        selectedSeihinBango
-                                    ) {
-                                        SKL0110ViewModel(application, skl0110ApiService).apply {
-                                            initParams(
-                                                userCd = loginUserCd,
-                                                gymTntCd = gymTntCd,
-                                                gymTntMei = gymTntMei,
-                                                sourceDivision = selectedSourceDiv,
-                                                seihinBango = selectedSeihinBango
-                                            )
-                                            // ★ 保管資材確定対象データが0件の場合に自動でSKL0111へ遷移する設定
-                                            onNavigateToNextScreen = {
+                            "shiwake" -> {
+                                var subScreen by remember { mutableStateOf("scan") }
+
+                                when (subScreen) {
+                                    "skl0110" -> {
+                                        val skl0110ApiService =
+                                            retrofit.create(SKL0110G01ApiService::class.java)
+                                        val skl0110ViewModel = remember(
+                                            loginUserCd,
+                                            gymTntCd,
+                                            gymTntMei,
+                                            selectedSourceDiv,
+                                            selectedSeihinBango
+                                        ) {
+                                            SKL0110ViewModel(application, skl0110ApiService).apply {
+                                                initParams(
+                                                    userCd = loginUserCd,
+                                                    gymTntCd = gymTntCd,
+                                                    gymTntMei = gymTntMei,
+                                                    sourceDivision = selectedSourceDiv,
+                                                    seihinBango = selectedSeihinBango
+                                                )
+                                                onNavigateToNextScreen = {
+                                                    writeLog(
+                                                        "D",
+                                                        "保管資材確定対象データが0件のため、自動で一時保管(保管エリア確定)画面へ遷移します: seihinBango=$selectedSeihinBango"
+                                                    )
+                                                    subScreen = "skl0111"
+                                                }
+                                            }
+                                        }
+
+                                        SKL0110G01Screen(
+                                            viewModel = skl0110ViewModel,
+                                            userCd = loginUserCd,
+                                            gymTntCd = gymTntCd,
+                                            gymTntMei = gymTntMei,
+                                            sourceDivision = selectedSourceDiv,
+                                            seihinBango = selectedSeihinBango,
+                                            onNavigateToMenu = {
+                                                currentScreen = "shiwake_menu"
+                                            },
+                                            onNavigateToChange = {
+                                                skl0110ViewModel.clearHokanShizai()
+                                            },
+                                            onNavigateToTemporary = {
                                                 writeLog(
                                                     "D",
-                                                    "保管資材確定対象データが0件のため、自動で一時保管(保管エリア確定)画面へ遷移します: seihinBango=$selectedSeihinBango"
+                                                    "一時保管(保管エリア確定)画面へ手動遷移: seihinBango=$selectedSeihinBango"
                                                 )
                                                 subScreen = "skl0111"
                                             }
-                                        }
-                                    }
-
-                                    SKL0110G01Screen(
-                                        viewModel = skl0110ViewModel,
-                                        userCd = loginUserCd,
-                                        gymTntCd = gymTntCd,
-                                        gymTntMei = gymTntMei,
-                                        sourceDivision = selectedSourceDiv,
-                                        seihinBango = selectedSeihinBango,
-                                        onNavigateToMenu = {
-                                            currentScreen = "shiwake_menu"
-                                        },
-                                        onNavigateToChange = {
-                                            skl0110ViewModel.clearHokanShizai()
-                                        },
-                                        onNavigateToTemporary = {
-                                            writeLog(
-                                                "D",
-                                                "一時保管(保管エリア確定)画面へ手動遷移: seihinBango=$selectedSeihinBango"
-                                            )
-                                            subScreen = "skl0111"
-                                        }
-                                    )
-                                }
-
-                                // SKL0111G01（一時保管: 保管エリア確定画面）のルーティング
-                                "skl0111" -> {
-                                    val skl0111ApiService =
-                                        retrofit.create(SKL0111G01ApiService::class.java)
-                                    val skl0111ViewModel = remember(
-                                        loginUserCd,
-                                        gymTntCd,
-                                        gymTntMei,
-                                        selectedSourceDiv,
-                                        selectedSeihinBango
-                                    ) {
-                                        SKL0111ViewModel(application, skl0111ApiService).apply {
-                                            initParams(
-                                                userCd = loginUserCd,
-                                                gymTntCd = gymTntCd,
-                                                gymTntMei = gymTntMei,
-                                                sourceDivision = selectedSourceDiv,
-                                                seihinBango = selectedSeihinBango
-                                            )
-                                        }
-                                    }
-
-                                    SKL0111G01Screen(
-                                        viewModel = skl0111ViewModel,
-                                        userCd = loginUserCd,
-                                        gymTntCd = gymTntCd,
-                                        gymTntMei = gymTntMei,
-                                        sourceDivision = selectedSourceDiv,
-                                        seihinBango = selectedSeihinBango,
-                                        onNavigateToMenu = {
-                                            currentScreen = "shiwake_menu"
-                                        },
-                                        onNavigateToAreaChange = {
-                                            skl0111ViewModel.clearHokanArea()
-                                        }
-                                    )
-                                }
-
-                                "skl0104" -> {
-                                    val skl0104ApiService =
-                                        retrofit.create(SKL0104G01ApiService::class.java)
-                                    val skl0104ViewModel = remember(
-                                        loginUserCd, gymTntCd, gymTntMei, selectedSourceDiv,
-                                        selectedChubunruiCode, selectedChubunruiName,
-                                        selectedShobunruiCode, selectedShobunruiName
-                                    ) {
-                                        SKL0104G01ViewModel(application, skl0104ApiService).apply {
-                                            initParams(
-                                                userCd = loginUserCd,
-                                                gymTntCd = gymTntCd,
-                                                gymTntMei = gymTntMei,
-                                                sourceDivision = selectedSourceDiv,
-                                                chuCode = selectedChubunruiCode,
-                                                chuName = selectedChubunruiName,
-                                                shoCode = selectedShobunruiCode,
-                                                shoName = selectedShobunruiName
-                                            )
-                                        }
-                                    }
-
-                                    SKL0104G01Screen(
-                                        viewModel = skl0104ViewModel,
-                                        userCd = loginUserCd,
-                                        gymTntCd = gymTntCd,
-                                        gymTntMei = gymTntMei,
-                                        sourceDivision = selectedSourceDiv,
-                                        chuCode = selectedChubunruiCode,
-                                        chuName = selectedChubunruiName,
-                                        shoCode = selectedShobunruiCode,
-                                        shoName = selectedShobunruiName,
-                                        onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
-                                        onNavigateToMenu = { _, _, _ ->
-                                            writeLog(
-                                                "D",
-                                                "仕分け・一時保管メニューへ戻る (shiwake_menu)"
-                                            )
-                                            currentScreen = "shiwake_menu"
-                                        },
-                                        onNavigateToChange = { _, _, _, _ ->
-                                            writeLog(
-                                                "D",
-                                                "保管BOX・保管資材変更へ遷移 (SKL0101に戻る)"
-                                            )
-                                            subScreen = "scan"
-                                        },
-                                        onNavigateToTemporary = { _, _, _, _, sb ->
-                                            writeLog(
-                                                "D",
-                                                "一時保管(保管エリア確定)画面へ遷移: seihinBango=$sb"
-                                            )
-                                            selectedSeihinBango = sb
-                                            subScreen = "skl0110"
-                                        },
-                                        onNavigateToEmergency = { _, _, _ -> }
-                                    )
-                                }
-
-                                else -> {
-                                    val skl0101ApiService =
-                                        retrofit.create(SKL0101G01ApiService::class.java)
-                                    val skl0101ViewModel = remember {
-                                        SKL0101ViewModel(
-                                            application,
-                                            skl0101ApiService
                                         )
                                     }
 
-                                    SKL0101G01Screen(
-                                        viewModel = skl0101ViewModel,
-                                        userCd = loginUserCd,
-                                        gymTntCd = gymTntCd,
-                                        gymTntMei = gymTntMei,
-                                        sourceDivision = selectedSourceDiv,
-                                        onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
-                                        onNavigateToMenu = { _, _, _ ->
-                                            currentScreen = "shiwake_menu"
-                                        },
-                                        onNavigateToShitei = { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
-                                            writeLog(
-                                                "D",
-                                                "仕分け画面 -> 次の画面へ遷移 (sourceDiv=$sDiv, cCode=$cCode, sCode=$sCode)"
-                                            )
-                                            selectedSourceDiv = sDiv
-                                            selectedChubunruiCode = cCode
-                                            selectedChubunruiName = cName
-                                            selectedShobunruiCode = sCode
-                                            selectedShobunruiName = sName
-
-                                            if (sDiv == "2") {
-                                                subScreen = "skl0104"
-                                            } else {
-                                                // TODO: 区分1や3の場合の遷移処理
+                                    "skl0111" -> {
+                                        val skl0111ApiService =
+                                            retrofit.create(SKL0111G01ApiService::class.java)
+                                        val skl0111ViewModel = remember(
+                                            loginUserCd,
+                                            gymTntCd,
+                                            gymTntMei,
+                                            selectedSourceDiv,
+                                            selectedSeihinBango
+                                        ) {
+                                            SKL0111ViewModel(application, skl0111ApiService).apply {
+                                                initParams(
+                                                    userCd = loginUserCd,
+                                                    gymTntCd = gymTntCd,
+                                                    gymTntMei = gymTntMei,
+                                                    sourceDivision = selectedSourceDiv,
+                                                    seihinBango = selectedSeihinBango
+                                                )
                                             }
                                         }
-                                    )
+
+                                        SKL0111G01Screen(
+                                            viewModel = skl0111ViewModel,
+                                            userCd = loginUserCd,
+                                            gymTntCd = gymTntCd,
+                                            gymTntMei = gymTntMei,
+                                            sourceDivision = selectedSourceDiv,
+                                            seihinBango = selectedSeihinBango,
+                                            onNavigateToMenu = {
+                                                currentScreen = "shiwake_menu"
+                                            },
+                                            onNavigateToAreaChange = {
+                                                skl0111ViewModel.clearHokanArea()
+                                            }
+                                        )
+                                    }
+
+                                    "skl0104" -> {
+                                        val skl0104ApiService =
+                                            retrofit.create(SKL0104G01ApiService::class.java)
+                                        val skl0104ViewModel = remember(
+                                            loginUserCd, gymTntCd, gymTntMei, selectedSourceDiv,
+                                            selectedChubunruiCode, selectedChubunruiName,
+                                            selectedShobunruiCode, selectedShobunruiName
+                                        ) {
+                                            SKL0104G01ViewModel(application, skl0104ApiService).apply {
+                                                initParams(
+                                                    userCd = loginUserCd,
+                                                    gymTntCd = gymTntCd,
+                                                    gymTntMei = gymTntMei,
+                                                    sourceDivision = selectedSourceDiv,
+                                                    chuCode = selectedChubunruiCode,
+                                                    chuName = selectedChubunruiName,
+                                                    shoCode = selectedShobunruiCode,
+                                                    shoName = selectedShobunruiName
+                                                )
+                                            }
+                                        }
+
+                                        SKL0104G01Screen(
+                                            viewModel = skl0104ViewModel,
+                                            userCd = loginUserCd,
+                                            gymTntCd = gymTntCd,
+                                            gymTntMei = gymTntMei,
+                                            sourceDivision = selectedSourceDiv,
+                                            chuCode = selectedChubunruiCode,
+                                            chuName = selectedChubunruiName,
+                                            shoCode = selectedShobunruiCode,
+                                            shoName = selectedShobunruiName,
+                                            onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
+                                            onNavigateToMenu = { _, _, _ ->
+                                                writeLog(
+                                                    "D",
+                                                    "仕分け・一時保管メニューへ戻る (shiwake_menu)"
+                                                )
+                                                currentScreen = "shiwake_menu"
+                                            },
+                                            onNavigateToChange = { _, _, _, _ ->
+                                                writeLog(
+                                                    "D",
+                                                    "保管BOX・保管資材変更へ遷移 (SKL0101に戻る)"
+                                                )
+                                                subScreen = "scan"
+                                            },
+                                            onNavigateToTemporary = { _, _, _, _, sb ->
+                                                writeLog(
+                                                    "D",
+                                                    "一時保管(保管エリア確定)画面へ遷移: seihinBango=$sb"
+                                                )
+                                                selectedSeihinBango = sb
+                                                subScreen = "skl0110"
+                                            },
+                                            onNavigateToEmergency = { _, _, _ -> }
+                                        )
+                                    }
+
+                                    else -> {
+                                        val skl0101ApiService =
+                                            retrofit.create(SKL0101G01ApiService::class.java)
+                                        val skl0101ViewModel = remember {
+                                            SKL0101ViewModel(
+                                                application,
+                                                skl0101ApiService
+                                            )
+                                        }
+
+                                        SKL0101G01Screen(
+                                            viewModel = skl0101ViewModel,
+                                            userCd = loginUserCd,
+                                            gymTntCd = gymTntCd,
+                                            gymTntMei = gymTntMei,
+                                            sourceDivision = selectedSourceDiv,
+                                            onNavigateToMain = { _, _, _ -> currentScreen = "menu" },
+                                            onNavigateToMenu = { _, _, _ ->
+                                                currentScreen = "shiwake_menu"
+                                            },
+                                            onNavigateToShitei = { uCd, tCd, tMei, cCode, cName, sCode, sName, sDiv ->
+                                                writeLog(
+                                                    "D",
+                                                    "仕分け画面 -> 次の画面へ遷移 (sourceDiv=$sDiv, cCode=$cCode, sCode=$sCode)"
+                                                )
+                                                selectedSourceDiv = sDiv
+                                                selectedChubunruiCode = cCode
+                                                selectedChubunruiName = cName
+                                                selectedShobunruiCode = sCode
+                                                selectedShobunruiName = sName
+
+                                                if (sDiv == "2") {
+                                                    subScreen = "skl0104"
+                                                } else {
+                                                    // TODO: 区分1や3の場合の遷移処理
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -398,5 +413,35 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        // ★ 画面の構築（setContent）が完了した「後」にナビゲーションバーを隠すように移動
+        hideNavigationButtons()
+    }
+
+    // ▼ ナビゲーションバーを隠すメソッド
+    private fun hideNavigationButtons() {
+        val window = this.window
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = window.insetsController
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.navigationBars())
+                controller.systemBarsBehavior =
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 画面に戻ってきたときにも確実にバーを隠す
+        hideNavigationButtons()
     }
 }

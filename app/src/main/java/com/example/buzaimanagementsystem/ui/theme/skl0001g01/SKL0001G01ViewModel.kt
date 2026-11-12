@@ -11,9 +11,7 @@ import com.example.buzaimanagementsystem.utils.AppConfig
 import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import com.example.buzaimanagementsystem.utils.FileLogger
 import kotlinx.coroutines.launch
-import java.net.NetworkInterface
 import java.util.Calendar
-import java.util.Collections
 
 class SKL0001G01ViewModel(
     application: Application,
@@ -103,111 +101,24 @@ class SKL0001G01ViewModel(
         )
     }
 
-    // ▼ 自端末のローカルIPv4アドレスを取得するヘルパー関数
-    private fun getLocalIpAddress(): String? {
-        try {
-            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
-            for (networkInterface in interfaces) {
-                val addrs = Collections.list(networkInterface.inetAddresses)
-                for (addr in addrs) {
-                    if (!addr.isLoopbackAddress) {
-                        val sAddr = addr.hostAddress ?: continue
-                        val isIPv4 = sAddr.indexOf(':') < 0
-                        if (isIPv4) {
-                            return sAddr
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            writeLog("E", "自端末のIPアドレス取得中に例外発生", e)
-        }
-        return null
-    }
-
     fun checkSystemAvailability() {
         writeLog("D", "checkSystemAvailability: システム稼働状況およびバーコードリーダーの接続を確認します")
 
         val context = getApplication<Application>()
+
+        // ★ 各端末の server_config.txt (またはローカル設定) から直接リーダーのMACアドレスを取得
         val savedAddress = AppConfig.getSavedBleDeviceAddress(context)
         val savedMeisho = AppConfig.getConfiguredDeviceMeisho(context)
 
-        // ==========================================
-        // ① 2回目以降：メモリ（SharedPreferences）から読み込んで接続する場合
-        // ==========================================
         if (!savedAddress.isNullOrBlank()) {
-            writeLog("I", "【保存済み接続】ローカル設定からリーダー情報をロードしました: 銘称=[$savedMeisho], MAC=($savedAddress)。このアドレスで接続します。")
+            writeLog("I", "【BLE接続】ローカル設定からリーダー情報をロードしました: 銘称=[$savedMeisho], MAC=($savedAddress)。このアドレスで接続します。")
             startBleConnection(context)
-        }
-        // ==========================================
-        // ② 初回起動時：未保存のため、サーバー経由で Reader.txt からIP突合して特定・保存する場合
-        // ==========================================
-        else {
-            writeLog("I", "【初回セットアップ】保存済みMACアドレスが見つかりません。サーバーからReader.txtキャッシュを取得して自機IPとの突合を開始します。")
-
-            viewModelScope.launch {
-                try {
-                    val readerList = apiService.getBarcodeReaderList()
-                    if (readerList.isNotEmpty()) {
-                        // 1. 自端末のIPアドレスを取得する
-                        val myIpAddress = getLocalIpAddress()?.trim()
-                        writeLog("I", "【初回セットアップ】自端末のIPアドレス: $myIpAddress (取得総数: ${readerList.size}件)")
-
-                        var matchedReader: DeviceMappingDto? = null
-
-                        // 2. Reader.txtのキャッシュリストをループさせて、1番目のカラム（端末IP）と自端末のIPが一致する行を探す
-                        for ((index, reader) in readerList.withIndex()) {
-                            val readerIp = reader.targetIpAddress?.trim() ?: ""
-                            writeLog("D", "  - 比較中 [インデックス $index]: 登録IP=[$readerIp], 登録MAC=[${reader.targetMacAddress}], 銘称=[${reader.targetMeisho}]")
-
-                            if (!myIpAddress.isNullOrBlank() && readerIp.equals(myIpAddress, ignoreCase = true)) {
-                                matchedReader = reader
-                                writeLog("I", "【初回セットアップ】Reader.txt内で自端末のIP($myIpAddress)に一致するリーダー設定を発見しました: 銘称=${reader.targetMeisho}, MAC=${reader.targetMacAddress}")
-                                break // 一致したらループを抜ける
-                            }
-                        }
-
-                        // 3. ループ終了後の判定（IP一致 ＋ MACアドレスの妥当性チェック）
-                        if (matchedReader != null) {
-                            val rawMac = matchedReader.targetMacAddress?.trim()
-
-                            // ★ IPは一致したが、MACアドレスが空、あるいは形式として不正な場合のエラー処理
-                            if (rawMac.isNullOrBlank() || rawMac.length < 12) {
-                                errorMessage = "バーコードリーダーのMACアドレス設定が不正です\nシステム管理者に問合せ願います"
-                                writeLog("W", "【初回セットアップ】自端末のIP(${myIpAddress})に一致する行が見つかりましたが、MACアドレスが空または不正です (MAC=[$rawMac])")
-                                return@launch
-                            }
-
-                            val formattedMac = if (!rawMac.contains(":") && rawMac.length == 12) {
-                                rawMac.chunked(2).joinToString(":")
-                            } else {
-                                rawMac
-                            }.uppercase()
-
-                            val targetName = matchedReader.targetMeisho ?: ""
-
-                            // ★ IPとMACの両方が正常に照合・検証された段階で、次回以降のためにAppConfigへ保存
-                            AppConfig.saveBleDeviceAddress(context, formattedMac, targetName)
-                            writeLog("I", "【初回セットアップ】IPおよびMACアドレスの照合に成功しました。リーダー情報をAppConfigへ永続保存します: 銘称=$targetName, MAC=$formattedMac")
-
-                            startBleConnection(context)
-
-                        } else {
-                            errorMessage = "バーコードリーダーに接続できません\nシステム管理者に問合せ願います"
-                            writeLog("W", "【初回セットアップ】Reader.txt全体を照合しましたが、自端末のIP($myIpAddress)に一致する設定行がありませんでした")
-                        }
-                    } else {
-                        errorMessage = "Reader.txtからバーコードリーダーのリストを取得できませんでした"
-                        writeLog("W", "【初回セットアップ】APIから取得したReader.txtのリストが空です")
-                    }
-                } catch (e: Exception) {
-                    writeLog("E", "【初回セットアップ】デバイスマッピングの取得中に例外発生", e)
-                    errorMessage = "NAS接続エラー: サーバーまたはマッピングAPIを確認してください"
-                }
-            }
+        } else {
+            errorMessage = "バーコードリーダーのMACアドレスが設定されていません\nserver_config.txtを確認してください"
+            writeLog("W", "【BLE接続】server_config.txt に有効なMACアドレスが保存されていません")
         }
 
-        // （以降の稼働時間・フラグチェックのコードはそのまま継続）
+        // 稼働時間・フラグチェックの処理
         viewModelScope.launch {
             try {
                 val response = apiService.getConditions()
@@ -284,10 +195,10 @@ class SKL0001G01ViewModel(
         val hasSpaceOrInvalid = basePart.any { char ->
             val code = char.code
             char == ' ' ||
-                    char == ' ' ||
-                    code == 0x3000 || // 全角スペース
-                    code == 0x0020 || // 半角スペース
-                    code == 0x00A0 || // NBSP
+                    char == ' ' || // 全角スペース
+                    code == 0x3000 ||
+                    code == 0x0020 ||
+                    code == 0x00A0 ||
                     code == 0x0009 || // タブ
                     !(char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '_')
         }

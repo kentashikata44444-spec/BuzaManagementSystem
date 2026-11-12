@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.buzaimanagementsystem.utils.FileLogger
+import com.example.buzaimanagementsystem.utils.SwipeWarningBox
 
 private const val TAG = "SKL0100G01Screen"
 
@@ -37,119 +38,122 @@ fun SKL0100G01Screen(
         viewModel.initParams(userCd, gymTntCd, gymTntMei)
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+    // ★ 一番外側を SwipeWarningBox で包み込み、どの場所でも上スワイプをガード
+    SwipeWarningBox {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // ==========================================
-            // 上部ヘッダー（3段構成）
-            // ==========================================
-
-            // 1段目：業務担当名（右寄せ）
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
-                Text(
-                    text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
-                    fontSize = 14.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 2段目：タイトルと下線
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
-            ) {
-                Column(
-                    modifier = Modifier.width(IntrinsicSize.Max)
-                ) {
-                    Text(
-                        text = "仕分け・一時保管メニュー",
-                        fontSize = 22.sp,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 3段目：メインメニューボタン（右寄せ）
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(
-                    onClick = {
-                        FileLogger.writeLog(context, "DEBUG", TAG, "メインメニューボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}")
-                        viewModel.onButtonClicked {
-                            onNavigateToMain(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei)
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .width(150.dp)
-                        .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
-                ) {
-                    Text(text = "メインメニュー", fontSize = 14.sp, color = Color.Black, maxLines = 1)
-                }
-            }
-
-            // ==========================================
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 中央：各仕分けメニューボタン群
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // ==========================================
+                // 上部ヘッダー（3段構成）
+                // ==========================================
+
+                // 1段目：業務担当名（右寄せ）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    MenuButton(text = "神戸支給品") {
-                        val sourceDivision = "1" //
-                        FileLogger.writeLog(context, "DEBUG", TAG, "神戸・筑波支給品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
-                        viewModel.onButtonClicked {
-                            onNavigateToKobeTsukuba(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
-                        }
+                    val displayName = if (gymTntMei.isNotEmpty()) gymTntMei else viewModel.gymTntMei
+                    Text(
+                        text = if (displayName.isNotEmpty()) "業務担当名  $displayName" else "業務担当名",
+                        fontSize = 14.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 2段目：タイトルと下線
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Column(
+                        modifier = Modifier.width(IntrinsicSize.Max)
+                    ) {
+                        Text(
+                            text = "仕分け・一時保管メニュー",
+                            fontSize = 22.sp,
+                            style = MaterialTheme.typography.titleLarge,
+                            maxLines = 1
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
                     }
-                    MenuButton(text = "鈴鹿支給品") {
-                        val sourceDivision = "2" //[cite: 2]
-                        FileLogger.writeLog(context, "DEBUG", TAG, "鈴鹿支給品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
-                        viewModel.onButtonClicked {
-                            onNavigateToSuzuka(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
-                        }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 3段目：メインメニューボタン（右寄せ）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = {
+                            FileLogger.writeLog(context, "DEBUG", TAG, "メインメニューボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}")
+                            viewModel.onButtonClicked {
+                                onNavigateToMain(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .width(150.dp)
+                            .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                    ) {
+                        Text(text = "メインメニュー", fontSize = 14.sp, color = Color.Black, maxLines = 1)
                     }
-                    MenuButton(text = "勝英購入品・倉庫品") {
-                        val sourceDivision = "3" //[cite: 2]
-                        FileLogger.writeLog(context, "DEBUG", TAG, "勝英購入品・倉庫品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
-                        viewModel.onButtonClicked {
-                            onNavigateToKatsueiWarehouse(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
+                }
+
+                // ==========================================
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 中央：各仕分けメニューボタン群
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        MenuButton(text = "神戸支給品") {
+                            val sourceDivision = "1"
+                            FileLogger.writeLog(context, "DEBUG", TAG, "神戸・筑波支給品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
+                            viewModel.onButtonClicked {
+                                onNavigateToKobeTsukuba(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
+                            }
+                        }
+                        MenuButton(text = "鈴鹿支給品") {
+                            val sourceDivision = "2"
+                            FileLogger.writeLog(context, "DEBUG", TAG, "鈴鹿支給品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
+                            viewModel.onButtonClicked {
+                                onNavigateToSuzuka(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
+                            }
+                        }
+                        MenuButton(text = "勝英購入品・倉庫品") {
+                            val sourceDivision = "3"
+                            FileLogger.writeLog(context, "DEBUG", TAG, "勝英購入品・倉庫品ボタン押下: userCd=${viewModel.userCd}, gymTntCd=${viewModel.gymTntCd}, gymTntMei=${viewModel.gymTntMei}, sourceDivision=$sourceDivision")
+                            viewModel.onButtonClicked {
+                                onNavigateToKatsueiWarehouse(viewModel.userCd, viewModel.gymTntCd, viewModel.gymTntMei, sourceDivision)
+                            }
                         }
                     }
                 }
