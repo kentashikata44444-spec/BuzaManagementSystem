@@ -64,6 +64,9 @@ object BluetoothConnectionHelper {
         return false
     }
 
+    /**
+     * server_config.txt からバーコードリーダーのMACアドレスを取得する
+     */
     fun getSavedBleDeviceAddress(context: Context): String? {
         return AppConfig.getSavedBleDeviceAddress(context)
     }
@@ -116,11 +119,12 @@ object BluetoothConnectionHelper {
 
         writeLog(context, "I", "connectToSavedDevice: 呼び出し開始（タイムアウト延長版: 8秒）")
 
+        // ★ APIやSharedPreferencesではなく、server_config.txt から直接リーダーのMACアドレスを取得
         val savedAddress = getSavedBleDeviceAddress(context)
         if (savedAddress.isNullOrEmpty()) {
             isConnecting = false
-            writeLog(context, "W", "connectToSavedDevice: 保存されたBLEアドレスがありません")
-            onDetailedError?.invoke("警告: 保存されたBLEアドレスがありません")
+            writeLog(context, "W", "connectToSavedDevice: server_config.txt にBLEアドレスが記載されていません")
+            onDetailedError?.invoke("警告: server_config.txt にBLEアドレスがありません")
             onConnectionStateChanged(false, null)
             return
         }
