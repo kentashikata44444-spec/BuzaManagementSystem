@@ -31,7 +31,6 @@ data class DeleteRequestModel(
     @SerializedName(value = "DENPYOBANGO", alternate = ["denpyoBango", "DenpyoBango"])
     val denpyoBango: String,
 
-
     @SerializedName(value = "SEIHINBANGO", alternate = ["seihinBango", "SeihinBango"])
     val seihinBango: String,
 
@@ -50,7 +49,6 @@ data class DeleteResponse(
     @SerializedName(value = "SUCCESS", alternate = ["success", "Success"])
     val success: Boolean,
 
-    // ★ 削除時にも message を受け取れるように追加
     @SerializedName(value = "MESSAGE", alternate = ["message", "Message"])
     val message: String?
 )
@@ -69,7 +67,6 @@ data class RegisterRequestModel(
     @SerializedName(value = "BUHINKANRINO", alternate = ["buhinKanriNo", "BuhinKanriNo"])
     val buhinKanriNo: String,
 
-    // ★ 保管エリアコード・名称を追加（未選択時は null または空文字を許容）
     @SerializedName(value = "HOKANERIACD", alternate = ["hokanEriaCd", "HokanEriaCd"])
     val hokanEriaCd: String? = null,
 
@@ -97,9 +94,14 @@ data class RegisterRequestModel(
     @SerializedName(value = "KINKYUKBN", alternate = ["kinkyuKbn", "Kinkyukbn"])
     val kinkyuKbn: String? = "1",
 
-    // ★ 業務担当名（仕分担当名）を受け渡すプロパティを追加
     @SerializedName(value = "SHIWAKETNTMEI", alternate = ["shiwakeTntMei", "ShiwakeTntMei", "gymTntMei"])
-    val shiwakeTntMei: String? = ""
+    val shiwakeTntMei: String? = "",
+
+    @SerializedName(value = "FEKOJOSEIBAN", alternate = ["feKojoSeiban", "FeKojoSeiban"])
+    val feKojoSeiban: String = "",
+
+    @SerializedName(value = "FESEQ", alternate = ["feSeq", "FeSeq"])
+    val feSeq: String = ""
 )
 
 // 登録レスポンスモデル

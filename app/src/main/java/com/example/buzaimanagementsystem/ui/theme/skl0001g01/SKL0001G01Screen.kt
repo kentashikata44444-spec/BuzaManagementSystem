@@ -183,6 +183,16 @@ fun SKL0001G01Screen(
                     Text(text = viewModel.displayTime, fontSize = 20.sp)
                 }
             }
+
+            // ★ 画面右下にテストバージョンを表示
+            Text(
+                text = "261113A",
+                fontSize = 12.sp,
+                color = Color.Gray,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = 8.dp)
+            )
         }
     }
 }
