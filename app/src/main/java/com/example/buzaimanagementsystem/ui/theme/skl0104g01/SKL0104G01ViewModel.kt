@@ -58,6 +58,12 @@ class SKL0104G01ViewModel(
     var hinban by mutableStateOf("")
         private set
 
+    // スキャンされた生データを保持するプロパティ
+    var scannedFeKojoSeiban by mutableStateOf("")
+        private set
+    var scannedFeSeq by mutableStateOf("")
+        private set
+
     // スキャンされたQRコードの種類に基づく伝票種別コードを保持（デフォルトは "03"）
     var scannedDenpyoShubetsu by mutableStateOf("03")
         private set
@@ -85,7 +91,7 @@ class SKL0104G01ViewModel(
         private set
 
     // ==========================================
-    // ★ ボタン制御用の状態・判定プロパティ
+    // ボタン制御用の状態・判定プロパティ
     // ==========================================
     var registeredItemCount by mutableStateOf(0)
         private set
@@ -93,33 +99,24 @@ class SKL0104G01ViewModel(
     var isDataLoadedForRegister by mutableStateOf(false)
         private set
 
-    // 保管BOX・保管資材変更: 常に有効
     val isChangeBoxOrMaterialEnabled: Boolean = true
-
-    // 保管資材説明: 常に有効
     val isMaterialDescriptionEnabled: Boolean = true
 
-    // 一時保管（保管エリア確定）: 登録件数が1件以上の場合は有効、ゼロ件は無効
     val isTemporaryStorageEnabled: Boolean
         get() = registeredItemCount > 0
 
-    // 緊急品集約: 緊急品表示が有りの場合は有効、無しの場合は無効
     val isEmergencyButtonEnabled: Boolean
         get() = isEmergency
 
-    // 削除: データが読み込まれている場合は有効
     val isDeleteEnabled: Boolean
         get() = seihinBango.isNotBlank() || denpyoBango.isNotBlank()
 
-    // 登録: データが正常に読み込まれ登録待ち状態の時は有効
     val isRegisterEnabled: Boolean
         get() = isDataLoadedForRegister
 
-    // 仕分け・一時保管メニュー: 登録件数がゼロ件の場合は有効、1件以上の場合は無効
     val isMenuEnabled: Boolean
         get() = registeredItemCount == 0
 
-    // 読み取り: 常に有効
     val isScanEnabled: Boolean = true
     // ==========================================
 
@@ -245,6 +242,8 @@ class SKL0104G01ViewModel(
         denpyoBango = ""
         buhinKanriNo = ""
         hinban = ""
+        scannedFeKojoSeiban = ""
+        scannedFeSeq = ""
         scannedDenpyoShubetsu = "03"
         shikyuYoteiSu = "0"
         konkaiShikyuSu = "0"
@@ -277,9 +276,7 @@ class SKL0104G01ViewModel(
         val tokens = scannedText.split("|").map { it.trim() }
         writeLog("I", "スキャンデータ解析: 項目数=${tokens.size}, テキスト=$scannedText")
 
-        var targetSeihinBango = ""
         var targetBuhinKanriNo = ""
-        var targetHinban = ""
 
         fun formatNumber(valueStr: String): String? {
             val doubleVal = valueStr.toDoubleOrNull() ?: return null
@@ -312,11 +309,11 @@ class SKL0104G01ViewModel(
                 val orderNo = tokens[0]
                 denpyoBango = orderNo
 
-                targetSeihinBango = if (tokens.size > 5) tokens[5] else ""
-                targetHinban = if (tokens.size > 6) tokens[6] else ""
+                scannedFeKojoSeiban = if (tokens.size > 5) tokens[5] else ""
+                scannedFeSeq = if (tokens.size > 6) tokens[6] else ""
 
-                seihinBango = targetSeihinBango
-                hinban = targetHinban
+                seihinBango = scannedFeKojoSeiban
+                hinban = scannedFeSeq
 
                 if (tokens.size >= 4) {
                     val chuzanStr = tokens[3]
@@ -331,21 +328,19 @@ class SKL0104G01ViewModel(
                     konkaiShikyuSu = formattedChuzan
                 }
                 scannedDenpyoShubetsu = "03"
-                writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', targetSeihinBango='$targetSeihinBango', targetHinban='$targetHinban'")
+                writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', scannedFeKojoSeiban='$scannedFeKojoSeiban', scannedFeSeq='$scannedFeSeq'")
             }
             tokens.size >= 2 && tokens[1] == "06" -> {
                 val issueNo = tokens[0]
                 denpyoBango = issueNo
-
-                targetSeihinBango = if (tokens.size > 5) tokens[5] else ""
-                targetHinban = if (tokens.size > 7) tokens[7] else ""
-
-                seihinBango = targetSeihinBango
-                hinban = targetHinban
+                scannedFeKojoSeiban = if (issueNo.length >= 9) issueNo.substring(0, 9) else issueNo
+                scannedFeSeq = if (issueNo.length >= 13) issueNo.substring(9, 13) else if (issueNo.length > 9) issueNo.substring(9) else ""
+                seihinBango = scannedFeKojoSeiban
+                hinban = scannedFeSeq
 
                 if (tokens.size >= 5) {
                     val tehaiSuStr = tokens[4]
-                    val formattedTehaiSu = formatNumber(tehaiSuStr)
+                    val formattedTehaiSu = formatNumber(tehaiSuStr) // ★ formatNumber を通すように修正
                     if (formattedTehaiSu == null) {
                         errorMessage = "データがTECHS部品表情報に存在しません"
                         writeLog("W", "スキャン解析エラー(払出伝票): 手配数が不正です -> $tehaiSuStr")
@@ -355,7 +350,7 @@ class SKL0104G01ViewModel(
                     konkaiShikyuSu = formattedTehaiSu
                 }
                 scannedDenpyoShubetsu = "03"
-                writeLog("I", "種別判定: 無償支給払出伝票検出 -> denpyoShubetsuCd='03', issueNo='$issueNo', targetSeihinBango='$targetSeihinBango', targetHinban='$targetHinban'")
+                writeLog("I", "種別判定: 無償支給払出伝票検出 -> denpyoShubetsuCd='03', issueNo='$issueNo'")
             }
             tokens.size == 1 -> {
                 errorMessage = "データがTECHS部品表情報に存在しません"
@@ -371,7 +366,7 @@ class SKL0104G01ViewModel(
             }
         }
 
-        executeBuhinHyoValidation(targetSeihinBango, targetBuhinKanriNo, targetHinban)
+        executeBuhinHyoValidation(scannedFeKojoSeiban, targetBuhinKanriNo, scannedFeSeq)
     }
 
     private fun clearInputFields() {
@@ -380,6 +375,8 @@ class SKL0104G01ViewModel(
         denpyoBango = ""
         buhinKanriNo = ""
         hinban = ""
+        scannedFeKojoSeiban = ""
+        scannedFeSeq = ""
         scannedDenpyoShubetsu = "03"
         shikyuYoteiSu = "0"
         konkaiShikyuSu = "0"
@@ -491,8 +488,6 @@ class SKL0104G01ViewModel(
                     denpyoBango = denpyoBango,
                     seihinBango = seihinBango,
                     buhinKanriNo = buhinKanriNo,
-                    hokanEriaCd = null,
-                    hokanEriaMeisho = null,
                     hokanBoxCd = hokanBoxCode,
                     hokanBoxMeisho = hokanBoxMeisho,
                     hokanShizaiCd = hokanShizaiCode,
@@ -500,7 +495,9 @@ class SKL0104G01ViewModel(
                     konkaiShikyuSu = konkaiSu,
                     userCd = userCd,
                     kinkyuKbn = kinkyuKbnValue,
-                    shiwakeTntMei = gymTntMei
+                    shiwakeTntMei = gymTntMei,
+                    feKojoSeiban = scannedFeKojoSeiban, // スキャン時の生データを指定
+                    feSeq = scannedFeSeq                // スキャン時の生データを指定
                 )
 
                 writeLog("I", "登録API呼び出し中...")
@@ -577,7 +574,7 @@ class SKL0104G01ViewModel(
                         try {
                             org.json.JSONObject(errorBodyString).optString("message", "削除処理に失敗しました")
                         } catch (e: Exception) {
-                            "削除処理に失敗しました"
+                            "登録処理に失敗しました"
                         }
                     } else {
                         "削除処理に失敗しました"
