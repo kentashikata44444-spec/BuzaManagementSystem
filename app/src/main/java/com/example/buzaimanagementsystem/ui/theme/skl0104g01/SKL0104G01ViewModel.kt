@@ -109,7 +109,7 @@ class SKL0104G01ViewModel(
         get() = isEmergency
 
     val isDeleteEnabled: Boolean
-        get() = seihinBango.isNotBlank() || denpyoBango.isNotBlank()
+        get() = registeredItemCount > 0
 
     val isRegisterEnabled: Boolean
         get() = isDataLoadedForRegister
