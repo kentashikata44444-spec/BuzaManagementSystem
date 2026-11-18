@@ -248,7 +248,7 @@ fun SKL0104G01Screen(
                                 .height(48.dp)
                                 .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                         ) {
-                            Text(text = "保管BOX・保管資材変更", color = Color.Black, fontSize = 12.sp, maxLines = 1)
+                            Text(text = "保管BOX・保管資材変更", color = Color.Black, fontSize = 10.sp, maxLines = 1)
                         }
 
                         Button(
