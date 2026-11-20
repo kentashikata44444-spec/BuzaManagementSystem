@@ -186,7 +186,7 @@ fun SKL0001G01Screen(
 
             // ★ 画面右下にテストバージョンを表示
             Text(
-                text = "261113A",
+                text = "261120A",
                 fontSize = 12.sp,
                 color = Color.Gray,
                 modifier = Modifier

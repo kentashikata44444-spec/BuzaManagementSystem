@@ -40,6 +40,7 @@ fun SKL0101G01Screen(
     gymTntCd: String,
     gymTntMei: String,
     sourceDivision: String = "1",
+    registeredItemCount: Int = 0, // ★ 追加（登録件数：1件以上の場合はメニューボタンを無効化）
     onNavigateToMain: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
     onNavigateToMenu: (userCd: String, gymTntCd: String, gymTntMei: String) -> Unit,
     onNavigateToShitei: (userCd: String, gymTntCd: String, gymTntMei: String, chuCode: String, chuName: String, shoCode: String, shoName: String, sourceDiv: String) -> Unit
@@ -181,7 +182,9 @@ fun SKL0101G01Screen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // 3段目：仕分け・一時保管メニューボタン（右寄せ・グレー＆黒枠）
+                    // 3段目：仕分け・一時保管メニューボタン（右寄せ・グレー＆黒枠／登録件数1件以上で無効）
+                    val isMenuEnabled = registeredItemCount == 0
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
@@ -191,13 +194,23 @@ fun SKL0101G01Screen(
                                 FileLogger.writeLog(context, "DEBUG", TAG, "仕分け・一時保管メニューボタン押下: userCd=$userCd, gymTntCd=$gymTntCd, gymTntMei=$gymTntMei")
                                 onNavigateToMenu(userCd, gymTntCd, gymTntMei)
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            enabled = isMenuEnabled,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE0E0E0),
+                                contentColor = Color.Black,
+                                disabledContainerColor = Color(0xFFF5F5F5),
+                                disabledContentColor = Color(0xFFBDBDBD)
+                            ),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                            modifier = Modifier.border(
+                                1.dp,
+                                if (isMenuEnabled) Color.Black else Color.LightGray,
+                                RoundedCornerShape(8.dp)
+                            )
                         ) {
                             Text(
                                 text = "仕分け・一時保管メニュー",
-                                color = Color.Black,
+                                color = if (isMenuEnabled) Color.Black else Color(0xFFBDBDBD),
                                 fontSize = 14.sp,
                                 maxLines = 1
                             )

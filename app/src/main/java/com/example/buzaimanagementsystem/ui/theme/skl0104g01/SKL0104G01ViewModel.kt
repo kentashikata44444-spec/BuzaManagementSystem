@@ -18,6 +18,8 @@ class SKL0104G01ViewModel(
 
     companion object {
         private const val TAG = "SKL0104G01ViewModel"
+        private const val REGISTERED_TYPE_NORMAL = "NORMAL"
+        private const val REGISTERED_TYPE_EMERGENCY = "EMERGENCY"
     }
 
     var userCd by mutableStateOf("")
@@ -79,6 +81,16 @@ class SKL0104G01ViewModel(
     var isEmergency by mutableStateOf(false)
         private set
 
+    // 緊急品登録が完了した状態（画面が変わるまで維持）
+    var isEmergencyRegistered by mutableStateOf(false)
+        private set
+
+    // 直前に登録した種別（"NORMAL" / "EMERGENCY" / null）
+    private var lastRegisteredType: String? = null
+
+    // 現在スキャン対象となっているデータが緊急品かどうか
+    private var pendingScannedIsEmergency: Boolean? = null
+
     var errorMessage by mutableStateOf<String?>(null)
         private set
     var infoMessage by mutableStateOf<String?>(null)
@@ -102,11 +114,13 @@ class SKL0104G01ViewModel(
     val isChangeBoxOrMaterialEnabled: Boolean = true
     val isMaterialDescriptionEnabled: Boolean = true
 
+    // 緊急品登録が完了した場合は「一時保管(保管エリア確定)」ボタンを無効化
     val isTemporaryStorageEnabled: Boolean
-        get() = registeredItemCount > 0
+        get() = registeredItemCount > 0 && !isEmergencyRegistered
 
+    // 緊急品表示中、または緊急品登録完了後（集約前）は「緊急品集約」ボタンを有効のまま維持
     val isEmergencyButtonEnabled: Boolean
-        get() = isEmergency
+        get() = isEmergency || isEmergencyRegistered
 
     val isDeleteEnabled: Boolean
         get() = registeredItemCount > 0
@@ -119,6 +133,14 @@ class SKL0104G01ViewModel(
 
     val isScanEnabled: Boolean = true
     // ==========================================
+
+    private fun resolveConnectionErrorMessage(): String {
+        return if (!BluetoothConnectionHelper.isBluetoothEnabled()) {
+            "Bluetoothがオフです\nBluetoothをオンにしてください"
+        } else {
+            "バーコードリーダーの電源がオフです\nバーコードリーダーの電源をいれてください"
+        }
+    }
 
     fun updateBleConnectionStatus(isConnected: Boolean, deviceAddress: String? = null) {
         isBleDeviceConnected = isConnected
@@ -133,8 +155,9 @@ class SKL0104G01ViewModel(
             infoMessage = null
         } else {
             isBleDeviceConnected = false
-            errorMessage = "Bluetoothがオフです\nBluetoothをオンにしてください"
-            writeLog("W", "BLEデバイスが切断されました / Bluetoothオフ")
+            infoMessage = null
+            errorMessage = resolveConnectionErrorMessage()
+            writeLog("W", "BLE未接続/切断 -> errorMessage=${errorMessage?.replace("\n", " / ")}")
         }
     }
 
@@ -197,8 +220,9 @@ class SKL0104G01ViewModel(
                     if (isConnected) startConnectionMonitor(context)
                 },
                 onDetailedError = { _ ->
-                    errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
                     isBleDeviceConnected = false
+                    infoMessage = null
+                    errorMessage = resolveConnectionErrorMessage()
                 },
                 onDataReceived = { scannedText ->
                     writeLog("I", "BLEデータ受信コールバック発火: $scannedText")
@@ -237,6 +261,28 @@ class SKL0104G01ViewModel(
     }
 
     fun clearInput() {
+        // すでにクリア済みなら再代入による不要な再コンポーズを防止
+        if (
+            seihinBango.isEmpty() &&
+            denpyoBango.isEmpty() &&
+            buhinKanriNo.isEmpty() &&
+            hinban.isEmpty() &&
+            scannedFeKojoSeiban.isEmpty() &&
+            scannedFeSeq.isEmpty() &&
+            scannedDenpyoShubetsu == "03" &&
+            shikyuYoteiSu == "0" &&
+            konkaiShikyuSu == "0" &&
+            tehaiSu == 0.0 &&
+            !isEmergency &&
+            !isEmergencyRegistered &&
+            pendingScannedIsEmergency == null &&
+            !isDataLoadedForRegister &&
+            errorMessage == null &&
+            infoMessage == null
+        ) {
+            return
+        }
+
         writeLog("I", "clearInput実行: 入力状態をクリアします (現在の登録件数: $registeredItemCount)")
         seihinBango = ""
         denpyoBango = ""
@@ -249,10 +295,30 @@ class SKL0104G01ViewModel(
         konkaiShikyuSu = "0"
         tehaiSu = 0.0
         isEmergency = false
+        isEmergencyRegistered = false
+        pendingScannedIsEmergency = null
         isDataLoadedForRegister = false
         errorMessage = null
         infoMessage = null
         writeLog("I", "clearInput完了 -> isRegisterEnabled: $isRegisterEnabled, isDeleteEnabled: $isDeleteEnabled")
+    }
+
+    // 保管エリア確定完了時や緊急品集約（メインメニュー遷移）時に登録件数・種別・入力状態をリセット
+    fun resetRegistrationState() {
+        writeLog("I", "resetRegistrationState実行: 登録件数・種別・入力状態をリセットします")
+        registeredItemCount = 0
+        lastRegisteredType = null
+        clearInput()
+    }
+
+    fun canNavigateToTemporaryStorage(): Boolean {
+        if (seihinBango.isBlank()) {
+            infoMessage = null
+            errorMessage = "現品票を読み取り後に、エリア確定ボタンを押してください"
+            writeLog("W", "canNavigateToTemporaryStorage: 製品Noが未設定のため遷移をブロック")
+            return false
+        }
+        return true
     }
 
     fun processScannedCode(scannedText: String) {
@@ -262,21 +328,23 @@ class SKL0104G01ViewModel(
             return
         }
 
-        errorMessage = null
-        infoMessage = null
-        isDataLoadedForRegister = false
-
         if (!scannedText.contains("|")) {
-            errorMessage = "データがTECHS部品表情報に存在しません"
             writeLog("W", "スキャン解析エラー: パイプ区切りが含まれていません -> $scannedText")
-            clearInputFields()
+            applyScanError(error = "データがTECHS部品表情報に存在しません")
             return
         }
 
         val tokens = scannedText.split("|").map { it.trim() }
         writeLog("I", "スキャンデータ解析: 項目数=${tokens.size}, テキスト=$scannedText")
 
-        var targetBuhinKanriNo = ""
+        var parsedDenpyoBango = ""
+        var parsedBuhinKanriNo = ""
+        var parsedHinban = ""
+        var parsedFeKojoSeiban = ""
+        var parsedFeSeq = ""
+        var parsedDenpyoShubetsu = "03"
+        var parsedShikyuYoteiSu: String? = null
+        var parsedKonkaiShikyuSu: String? = null
 
         fun formatNumber(valueStr: String): String? {
             val doubleVal = valueStr.toDoubleOrNull() ?: return null
@@ -289,90 +357,92 @@ class SKL0104G01ViewModel(
 
         when {
             tokens.size == 3 -> {
+                parsedDenpyoBango = tokens[0]
                 val qtyStr = tokens[2]
                 val formattedQty = formatNumber(qtyStr)
                 if (formattedQty == null) {
-                    errorMessage = "データがTECHS部品表情報に存在しません"
                     writeLog("W", "スキャン解析エラー(3項目): 数量が不正です -> $qtyStr")
-                    clearInputFields()
+                    applyScanError(error = "データがTECHS部品表情報に存在しません")
                     return
                 }
 
-                buhinKanriNo = tokens[1]
-                targetBuhinKanriNo = tokens[1]
-                shikyuYoteiSu = formattedQty
-                konkaiShikyuSu = formattedQty
-                scannedDenpyoShubetsu = "04"
-                writeLog("I", "種別判定: 部材現品票検出 -> denpyoShubetsuCd='04', buhinKanriNo='$buhinKanriNo', qty='$formattedQty'")
+                parsedBuhinKanriNo = tokens[1]
+                parsedShikyuYoteiSu = formattedQty
+                parsedKonkaiShikyuSu = formattedQty
+                parsedDenpyoShubetsu = "04"
+                writeLog("I", "種別判定: 部材現品票検出 -> denpyoShubetsuCd='04', buhinKanriNo='$parsedBuhinKanriNo', qty='$formattedQty'")
             }
             tokens.size >= 2 && tokens[1] == "03" -> {
                 val orderNo = tokens[0]
-                denpyoBango = orderNo
-
-                scannedFeKojoSeiban = if (tokens.size > 5) tokens[5] else ""
-                scannedFeSeq = if (tokens.size > 6) tokens[6] else ""
-
-                seihinBango = scannedFeKojoSeiban
-                hinban = scannedFeSeq
+                parsedDenpyoBango = orderNo
+                parsedFeKojoSeiban = if (tokens.size > 5) tokens[5] else ""
+                parsedFeSeq = if (tokens.size > 6) tokens[6] else ""
+                parsedHinban = parsedFeSeq
 
                 if (tokens.size >= 4) {
                     val chuzanStr = tokens[3]
                     val formattedChuzan = formatNumber(chuzanStr)
                     if (formattedChuzan == null) {
-                        errorMessage = "データがTECHS部品表情報に存在しません"
                         writeLog("W", "スキャン解析エラー(現品票): 支給残数が不正です -> $chuzanStr")
-                        clearInputFields()
+                        applyScanError(error = "データがTECHS部品表情報に存在しません")
                         return
                     }
-                    shikyuYoteiSu = formattedChuzan
-                    konkaiShikyuSu = formattedChuzan
+                    parsedShikyuYoteiSu = formattedChuzan
+                    parsedKonkaiShikyuSu = formattedChuzan
                 }
-                scannedDenpyoShubetsu = "03"
-                writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', scannedFeKojoSeiban='$scannedFeKojoSeiban', scannedFeSeq='$scannedFeSeq'")
+                parsedDenpyoShubetsu = "03"
+                writeLog("I", "種別判定: 現品票検出 -> denpyoShubetsuCd='03', denpyoBango='$orderNo', feKojoSeiban='$parsedFeKojoSeiban', feSeq='$parsedFeSeq'")
             }
             tokens.size >= 2 && tokens[1] == "06" -> {
                 val issueNo = tokens[0]
-                denpyoBango = issueNo
-                scannedFeKojoSeiban = if (issueNo.length >= 9) issueNo.substring(0, 9) else issueNo
-                scannedFeSeq = if (issueNo.length >= 13) issueNo.substring(9, 13) else if (issueNo.length > 9) issueNo.substring(9) else ""
-                seihinBango = scannedFeKojoSeiban
-                hinban = scannedFeSeq
+                parsedDenpyoBango = issueNo
+                parsedFeKojoSeiban = if (issueNo.length >= 9) issueNo.substring(0, 9) else issueNo
+                parsedFeSeq = if (issueNo.length >= 13) issueNo.substring(9, 13) else if (issueNo.length > 9) issueNo.substring(9) else ""
+                parsedHinban = parsedFeSeq
 
                 if (tokens.size >= 5) {
                     val tehaiSuStr = tokens[4]
-                    val formattedTehaiSu = formatNumber(tehaiSuStr) // ★ formatNumber を通すように修正
+                    val formattedTehaiSu = formatNumber(tehaiSuStr)
                     if (formattedTehaiSu == null) {
-                        errorMessage = "データがTECHS部品表情報に存在しません"
                         writeLog("W", "スキャン解析エラー(払出伝票): 手配数が不正です -> $tehaiSuStr")
-                        clearInputFields()
+                        applyScanError(error = "データがTECHS部品表情報に存在しません")
                         return
                     }
-                    konkaiShikyuSu = formattedTehaiSu
+                    parsedKonkaiShikyuSu = formattedTehaiSu
                 }
-                scannedDenpyoShubetsu = "03"
+                parsedDenpyoShubetsu = "03"
                 writeLog("I", "種別判定: 無償支給払出伝票検出 -> denpyoShubetsuCd='03', issueNo='$issueNo'")
             }
             tokens.size == 1 -> {
-                errorMessage = "データがTECHS部品表情報に存在しません"
                 writeLog("W", "スキャン解析エラー: 単体コードは許可されていません -> ${tokens[0]}")
-                clearInputFields()
+                applyScanError(error = "データがTECHS部品表情報に存在しません")
                 return
             }
             else -> {
-                errorMessage = "データがTECHS部品表情報に存在しません"
                 writeLog("W", "スキャン解析エラー: 不明なトークン数です -> ${tokens.size}")
-                clearInputFields()
+                applyScanError(error = "データがTECHS部品表情報に存在しません")
                 return
             }
         }
 
-        executeBuhinHyoValidation(scannedFeKojoSeiban, targetBuhinKanriNo, scannedFeSeq)
+        executeBuhinHyoValidation(
+            seihinBangoQuery = parsedFeKojoSeiban,
+            buhinKanriNoQuery = parsedBuhinKanriNo,
+            hinbanQuery = parsedFeSeq,
+            parsedDenpyoBango = parsedDenpyoBango,
+            parsedBuhinKanriNo = parsedBuhinKanriNo,
+            parsedHinban = parsedHinban,
+            parsedFeKojoSeiban = parsedFeKojoSeiban,
+            parsedFeSeq = parsedFeSeq,
+            parsedDenpyoShubetsu = parsedDenpyoShubetsu,
+            parsedShikyuYoteiSu = parsedShikyuYoteiSu,
+            parsedKonkaiShikyuSu = parsedKonkaiShikyuSu
+        )
     }
 
-    private fun clearInputFields() {
-        writeLog("I", "clearInputFields実行")
+    private fun applyScanError(error: String, keepDenpyoBango: String = "") {
         seihinBango = ""
-        denpyoBango = ""
+        denpyoBango = keepDenpyoBango
         buhinKanriNo = ""
         hinban = ""
         scannedFeKojoSeiban = ""
@@ -381,10 +451,26 @@ class SKL0104G01ViewModel(
         shikyuYoteiSu = "0"
         konkaiShikyuSu = "0"
         tehaiSu = 0.0
+        isEmergency = false
+        pendingScannedIsEmergency = null
         isDataLoadedForRegister = false
+        infoMessage = null
+        errorMessage = error
     }
 
-    private fun executeBuhinHyoValidation(seihinBangoQuery: String, buhinKanriNoQuery: String, hinbanQuery: String) {
+    private fun executeBuhinHyoValidation(
+        seihinBangoQuery: String,
+        buhinKanriNoQuery: String,
+        hinbanQuery: String,
+        parsedDenpyoBango: String,
+        parsedBuhinKanriNo: String,
+        parsedHinban: String,
+        parsedFeKojoSeiban: String,
+        parsedFeSeq: String,
+        parsedDenpyoShubetsu: String,
+        parsedShikyuYoteiSu: String?,
+        parsedKonkaiShikyuSu: String?
+    ) {
         writeLog("I", "executeBuhinHyoValidation開始: seihinBangoQuery='$seihinBangoQuery', buhinKanriNoQuery='$buhinKanriNoQuery', hinbanQuery='$hinbanQuery'")
         viewModelScope.launch {
             try {
@@ -394,33 +480,43 @@ class SKL0104G01ViewModel(
                     hinban = hinbanQuery.ifEmpty { null }
                 )
 
+                // TECHSを検索して値が取得できない場合のみ、読み取った伝票番号を反映
                 if (!buhinHyoResponse.isSuccessful || buhinHyoResponse.body() == null) {
-                    errorMessage = "データがTECHS部品表情報に存在しません"
-                    isDataLoadedForRegister = false
-                    writeLog("W", "部品表バリデーション失敗: APIレスポンスが不成功またはnullです (isSuccessful=${buhinHyoResponse.isSuccessful})")
+                    writeLog("W", "部品表バリデーション失敗: APIレスポンスが不成功またはnullです (isSuccessful=${buhinHyoResponse.isSuccessful}), denpyoBango='$parsedDenpyoBango'")
+                    applyScanError(
+                        error = "データがTECHS部品表情報に存在しません",
+                        keepDenpyoBango = parsedDenpyoBango
+                    )
                     return@launch
                 }
 
                 val buhinInfo = buhinHyoResponse.body()!!
                 val fetchedSeihinBango = buhinInfo.seihinBango ?: seihinBangoQuery
+                val scannedIsEmergency = fetchEmergencyFlag(fetchedSeihinBango)
 
-                seihinBango = fetchedSeihinBango
-
-                if (!buhinInfo.buhinKanriNo.isNullOrBlank()) {
-                    buhinKanriNo = buhinInfo.buhinKanriNo
+                // 直前登録種別との整合性チェック
+                // 読み込まれたQRデータは画面に反映せずそのまま、登録ボタンも無効にしない
+                when {
+                    lastRegisteredType == REGISTERED_TYPE_NORMAL && scannedIsEmergency -> {
+                        infoMessage = null
+                        errorMessage = "保管エリア確定を行ってください\nエリア確定後に、緊急品の登録を行ってください"
+                        writeLog("W", "通常品登録後に緊急品QRが読み込まれたため画面反映をスキップ（登録ボタンは維持）")
+                        return@launch
+                    }
+                    lastRegisteredType == REGISTERED_TYPE_EMERGENCY && !scannedIsEmergency -> {
+                        infoMessage = null
+                        errorMessage = "緊急品集約を行ってください\n緊急品集約後に、支給品の登録を行ってください"
+                        writeLog("W", "緊急品登録後に通常品QRが読み込まれたため画面反映をスキップ（登録ボタンは維持）")
+                        return@launch
+                    }
                 }
 
                 val fetchedTehaiSu = buhinInfo.tehaisu ?: 0.0
-                tehaiSu = fetchedTehaiSu
-                shikyuYoteiSu = if (fetchedTehaiSu % 1.0 == 0.0) {
+                val formattedTehaiSu = if (fetchedTehaiSu % 1.0 == 0.0) {
                     fetchedTehaiSu.toInt().toString()
                 } else {
                     String.format(java.util.Locale.US, "%.2f", fetchedTehaiSu).trimEnd('0').trimEnd('.')
                 }
-
-                writeLog("I", "部品表データ取得成功 -> seihinBango='$seihinBango', buhinKanriNo='$buhinKanriNo', tehaiSu=$tehaiSu")
-
-                checkEmergency(fetchedSeihinBango)
 
                 val boxCodeToCheck = shobunruiCode.ifEmpty { hokanBoxCode }
                 if (boxCodeToCheck.isNotEmpty()) {
@@ -430,58 +526,74 @@ class SKL0104G01ViewModel(
                         val usingSeihinBango = boxCheckResponse.body()?.seihinBango
                         writeLog("I", "保管BOX使用状況取得成功: usingSeihinBango='$usingSeihinBango'")
                         if (!usingSeihinBango.isNullOrBlank() && usingSeihinBango != fetchedSeihinBango) {
-                            errorMessage = "既に他の製品No保管BOXを使用しています\n保管BOXを変更してください"
+                            infoMessage = null
                             isDataLoadedForRegister = false
+                            errorMessage = "既に他の製品No保管BOXを使用しています\n保管BOXを変更してください"
                             writeLog("W", "保管BOX重複エラー: 異なる製品Noで使用されています (using=$usingSeihinBango, current=$fetchedSeihinBango)")
                             return@launch
                         }
                     }
                 }
 
+                // 整合性OKの場合のみ画面表示状態をまとめて更新
+                pendingScannedIsEmergency = scannedIsEmergency
+                isEmergency = scannedIsEmergency
+                seihinBango = fetchedSeihinBango
+                denpyoBango = parsedDenpyoBango
+                buhinKanriNo = if (!buhinInfo.buhinKanriNo.isNullOrBlank()) buhinInfo.buhinKanriNo else parsedBuhinKanriNo
+                hinban = parsedHinban
+                scannedFeKojoSeiban = parsedFeKojoSeiban
+                scannedFeSeq = parsedFeSeq
+                scannedDenpyoShubetsu = parsedDenpyoShubetsu
+                tehaiSu = fetchedTehaiSu
+                shikyuYoteiSu = parsedShikyuYoteiSu ?: formattedTehaiSu
+                if (parsedKonkaiShikyuSu != null) {
+                    konkaiShikyuSu = parsedKonkaiShikyuSu
+                }
                 isDataLoadedForRegister = true
                 infoMessage = "『登録』ボタンを押してください"
-                writeLog("I", "バリデーション全完了 -> isRegisterEnabled(isDataLoadedForRegister) = true")
+                errorMessage = null
+                writeLog("I", "バリデーション全完了 -> seihinBango='$seihinBango', isRegisterEnabled(isDataLoadedForRegister) = true")
 
             } catch (e: Exception) {
-                errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
+                infoMessage = null
                 isDataLoadedForRegister = false
+                errorMessage = "ハードウェア異常 システム管理者に問合せ願います"
                 writeLog("E", "部品表バリデーション中に例外発生: ${e.message}", e)
             }
         }
     }
 
-    private fun checkEmergency(targetSeihinBango: String) {
-        writeLog("I", "checkEmergency開始: targetSeihinBango='$targetSeihinBango'")
-        viewModelScope.launch {
-            try {
-                val response = apiService.checkEmergency(targetSeihinBango)
-                if (response.isSuccessful) {
-                    val kinkyuVal = response.body()?.kinkyu
-                    isEmergency = !kinkyuVal.isNullOrBlank()
-                    writeLog("I", "checkEmergency成功: kinkyuVal='$kinkyuVal', isEmergency=$isEmergency, isEmergencyButtonEnabled=$isEmergencyButtonEnabled")
-                } else {
-                    isEmergency = false
-                    writeLog("W", "checkEmergency不成功: code=${response.code()}")
-                }
-            } catch (e: Exception) {
-                isEmergency = false
-                writeLog("E", "checkEmergency例外発生: ${e.message}", e)
+    private suspend fun fetchEmergencyFlag(targetSeihinBango: String): Boolean {
+        writeLog("I", "fetchEmergencyFlag開始: targetSeihinBango='$targetSeihinBango'")
+        return try {
+            val response = apiService.checkEmergency(targetSeihinBango)
+            if (response.isSuccessful) {
+                val kinkyuVal = response.body()?.kinkyu
+                val result = !kinkyuVal.isNullOrBlank()
+                writeLog("I", "fetchEmergencyFlag成功: kinkyuVal='$kinkyuVal', isEmergency=$result")
+                result
+            } else {
+                writeLog("W", "fetchEmergencyFlag不成功: code=${response.code()}")
+                false
             }
+        } catch (e: Exception) {
+            writeLog("E", "fetchEmergencyFlag例外発生: ${e.message}", e)
+            false
         }
     }
 
     fun executeRegister() {
-        errorMessage = null
-        infoMessage = null
+        val registerAsEmergency = pendingScannedIsEmergency ?: isEmergency
 
         writeLog("I", "=== executeRegister開始 ===")
-        writeLog("I", "送信パラメータ -> denpyoBango: '$denpyoBango', seihinBango: '$seihinBango', buhinKanriNo: '$buhinKanriNo', konkaiShikyuSu: '$konkaiShikyuSu', isEmergency: $isEmergency, gymTntMei: '$gymTntMei'")
+        writeLog("I", "送信パラメータ -> denpyoBango: '$denpyoBango', seihinBango: '$seihinBango', buhinKanriNo: '$buhinKanriNo', konkaiShikyuSu: '$konkaiShikyuSu', registerAsEmergency: $registerAsEmergency, gymTntMei: '$gymTntMei'")
 
         viewModelScope.launch {
             try {
                 val konkaiSu = konkaiShikyuSu.toDoubleOrNull() ?: 0.0
                 val denpyoShubetsu = scannedDenpyoShubetsu
-                val kinkyuKbnValue = if (isEmergency) "2" else "1"
+                val kinkyuKbnValue = if (registerAsEmergency) "2" else "1"
 
                 val request = RegisterRequestModel(
                     denpyoShubetsuCd = denpyoShubetsu,
@@ -496,8 +608,8 @@ class SKL0104G01ViewModel(
                     userCd = userCd,
                     kinkyuKbn = kinkyuKbnValue,
                     shiwakeTntMei = gymTntMei,
-                    feKojoSeiban = scannedFeKojoSeiban, // スキャン時の生データを指定
-                    feSeq = scannedFeSeq                // スキャン時の生データを指定
+                    feKojoSeiban = scannedFeKojoSeiban,
+                    feSeq = scannedFeSeq
                 )
 
                 writeLog("I", "登録API呼び出し中...")
@@ -505,10 +617,21 @@ class SKL0104G01ViewModel(
                 writeLog("I", "登録APIレスポンス受信: isSuccessful=${response.isSuccessful}, code=${response.code()}")
 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    infoMessage = "仕分け登録完了"
+                    lastRegisteredType = if (registerAsEmergency) {
+                        REGISTERED_TYPE_EMERGENCY
+                    } else {
+                        REGISTERED_TYPE_NORMAL
+                    }
                     registeredItemCount++
                     isDataLoadedForRegister = false
-                    writeLog("I", "【登録成功】 registeredItemCountがインクリメントされました -> 現在の件数: $registeredItemCount")
+                    if (registerAsEmergency) {
+                        isEmergencyRegistered = true
+                        infoMessage = "緊急品の集約が完了しました。\n投入リストを発行してください。"
+                    } else {
+                        infoMessage = "仕分け登録完了"
+                    }
+                    errorMessage = null
+                    writeLog("I", "【登録成功】 lastRegisteredType=$lastRegisteredType, isEmergencyRegistered=$isEmergencyRegistered, registeredItemCount=$registeredItemCount")
                 } else {
                     val errorBodyString = response.errorBody()?.string()
                     writeLog("W", "登録APIエラーレスポンス: $errorBodyString")
@@ -521,10 +644,12 @@ class SKL0104G01ViewModel(
                     } else {
                         response.body()?.message ?: "登録処理に失敗しました"
                     }
+                    infoMessage = null
                     errorMessage = errorMsg
                     writeLog("W", "登録失敗メッセージ設定: $errorMsg")
                 }
             } catch (e: Exception) {
+                infoMessage = null
                 errorMessage = "システム管理者に連絡してください"
                 writeLog("E", "登録処理中に例外発生: ${e.message}", e)
             }
@@ -533,13 +658,11 @@ class SKL0104G01ViewModel(
 
     fun executeDelete() {
         if (seihinBango.isBlank() && denpyoBango.isBlank()) {
+            infoMessage = null
             errorMessage = "削除対象のデータが読み込まれていません"
             writeLog("W", "executeDelete: 削除対象データが存在しません")
             return
         }
-
-        errorMessage = null
-        infoMessage = null
 
         val boxCd = shobunruiCode.ifEmpty { hokanBoxCode }
         val shizaiCd = chubunruiCode.ifEmpty { hokanShizaiCode }
@@ -566,6 +689,10 @@ class SKL0104G01ViewModel(
                     if (registeredItemCount > 0) {
                         registeredItemCount--
                     }
+                    if (registeredItemCount == 0) {
+                        lastRegisteredType = null
+                    }
+                    errorMessage = null
                     infoMessage = "削除完了"
                     writeLog("I", "【削除成功】残り件数: $registeredItemCount")
                 } else {
@@ -579,10 +706,12 @@ class SKL0104G01ViewModel(
                     } else {
                         "削除処理に失敗しました"
                     }
+                    infoMessage = null
                     errorMessage = errorMsg
                     writeLog("W", "削除失敗メッセージ設定: $errorMsg")
                 }
             } catch (e: Exception) {
+                infoMessage = null
                 errorMessage = "システム管理者に連絡してください"
                 writeLog("E", "削除処理中に例外発生: ${e.message}", e)
             }
@@ -611,6 +740,20 @@ class SKL0104G01ViewModel(
             hokanShizaiCode = ""
             hokanShizaiMeisho = ""
             writeLog("I", "初期選択: 保管BOXを設定しました (Code: $shoCode)")
+        }
+    }
+
+    fun updateKonkaiShikyuSu(newValue: String) {
+        konkaiShikyuSu = if (newValue.isBlank()) "0" else newValue
+        writeLog("I", "今回支給数を更新しました: konkaiShikyuSu='$konkaiShikyuSu'")
+    }
+
+    fun clearMessages() {
+        if (errorMessage != null) {
+            errorMessage = null
+        }
+        if (infoMessage != null) {
+            infoMessage = null
         }
     }
 }

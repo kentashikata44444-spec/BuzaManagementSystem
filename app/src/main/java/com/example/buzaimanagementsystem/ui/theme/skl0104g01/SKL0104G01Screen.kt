@@ -30,9 +30,17 @@ import com.example.buzaimanagementsystem.OcrCameraView
 import com.example.buzaimanagementsystem.R
 import com.example.buzaimanagementsystem.utils.BluetoothConnectionHelper
 import com.example.buzaimanagementsystem.utils.FileLogger
+import com.example.buzaimanagementsystem.utils.NumericKeypadDialog
 import com.example.buzaimanagementsystem.utils.SwipeWarningBox // ★ 追加
-
 private const val TAG = "SKL0104G01Screen"
+
+@Composable
+private fun actionButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
+    containerColor = Color(0xFFE0E0E0),
+    contentColor = Color.Black,
+    disabledContainerColor = Color(0xFFF5F5F5),
+    disabledContentColor = Color(0xFFBDBDBD)
+)
 
 @Composable
 fun SKL0104G01Screen(
@@ -54,6 +62,7 @@ fun SKL0104G01Screen(
     val context = LocalContext.current
 
     var showHelpDialog by remember { mutableStateOf(false) }
+    var showKeypadDialog by remember { mutableStateOf(false) }
     var isCameraActive by remember { mutableStateOf(false) }
 
     var hasCameraPermission by remember {
@@ -215,13 +224,17 @@ fun SKL0104G01Screen(
                         Button(
                             onClick = { onNavigateToMenu(userCd, gymTntCd, gymTntMei) },
                             enabled = viewModel.isMenuEnabled,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .height(48.dp)
-                                .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                .border(
+                                    1.dp,
+                                    if (viewModel.isMenuEnabled) Color.Black else Color.LightGray,
+                                    RoundedCornerShape(8.dp)
+                                )
                         ) {
-                            Text(text = "仕分け・一時保管メニュー", color = Color.Black, fontSize = 13.sp, maxLines = 1)
+                            Text(text = "仕分け・一時保管メニュー", fontSize = 13.sp, maxLines = 1)
                         }
                     }
 
@@ -241,14 +254,14 @@ fun SKL0104G01Screen(
                                     sourceDivision
                                 )
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp)
                                 .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                         ) {
-                            Text(text = "保管BOX・保管資材変更", color = Color.Black, fontSize = 10.sp, maxLines = 1)
+                            Text(text = "保管BOX・保管資材変更", fontSize = 10.sp, maxLines = 1)
                         }
 
                         Button(
@@ -262,14 +275,18 @@ fun SKL0104G01Screen(
                                 )
                             },
                             enabled = viewModel.isTemporaryStorageEnabled,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp)
-                                .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                .border(
+                                    1.dp,
+                                    if (viewModel.isTemporaryStorageEnabled) Color.Black else Color.LightGray,
+                                    RoundedCornerShape(8.dp)
+                                )
                         ) {
-                            Text(text = "一時保管(保管エリア確定)", color = Color.Black, fontSize = 10.sp, maxLines = 1)
+                            Text(text = "一時保管(保管エリア確定)", fontSize = 10.sp, maxLines = 1)
                         }
                     }
 
@@ -459,20 +476,32 @@ fun SKL0104G01Screen(
                             )
                         }
 
+                        val isKonkaiShikyuSuEditable = viewModel.isDataLoadedForRegister
+
                         Text(text = "今回支給数", fontSize = 14.sp, color = Color.Black)
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp)
-                                .background(Color(0xFFFFCDD2), shape = RoundedCornerShape(4.dp))
-                                .border(1.dp, Color.Black, shape = RoundedCornerShape(4.dp))
+                                .background(
+                                    if (isKonkaiShikyuSuEditable) Color(0xFFFFCDD2) else Color(0xFFF5F5F5),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isKonkaiShikyuSuEditable) Color.Black else Color.LightGray,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .clickable(enabled = isKonkaiShikyuSuEditable) {
+                                    showKeypadDialog = true
+                                }
                                 .padding(horizontal = 12.dp),
                             contentAlignment = Alignment.CenterEnd
                         ) {
                             Text(
                                 text = viewModel.konkaiShikyuSu,
                                 fontSize = 14.sp,
-                                color = Color.Black,
+                                color = if (isKonkaiShikyuSuEditable) Color.Black else Color.Gray,
                                 textAlign = TextAlign.End,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 1
@@ -490,25 +519,33 @@ fun SKL0104G01Screen(
                         Button(
                             onClick = { viewModel.executeRegister() },
                             enabled = viewModel.isRegisterEnabled,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .width(130.dp)
-                                .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                .border(
+                                    1.dp,
+                                    if (viewModel.isRegisterEnabled) Color.Black else Color.LightGray,
+                                    RoundedCornerShape(8.dp)
+                                )
                         ) {
-                            Text(text = "登録", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "登録", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Button(
                             onClick = { viewModel.executeDelete() },
                             enabled = viewModel.isDeleteEnabled,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .width(130.dp)
-                                .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                .border(
+                                    1.dp,
+                                    if (viewModel.isDeleteEnabled) Color.Black else Color.LightGray,
+                                    RoundedCornerShape(8.dp)
+                                )
                         ) {
-                            Text(text = "削除", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "削除", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -522,13 +559,17 @@ fun SKL0104G01Screen(
                         Button(
                             onClick = { onNavigateToEmergency(userCd, gymTntCd, gymTntMei) },
                             enabled = viewModel.isEmergencyButtonEnabled,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .width(160.dp)
-                                .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                .border(
+                                    1.dp,
+                                    if (viewModel.isEmergencyButtonEnabled) Color.Black else Color.LightGray,
+                                    RoundedCornerShape(8.dp)
+                                )
                         ) {
-                            Text(text = "緊急品集約", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "緊急品集約", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Button(
@@ -539,7 +580,7 @@ fun SKL0104G01Screen(
                                     isCameraActive = !isCameraActive
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .width(130.dp)
@@ -547,7 +588,6 @@ fun SKL0104G01Screen(
                         ) {
                             Text(
                                 text = if (isCameraActive) "カメラ停止" else "カメラ起動",
-                                color = Color.Black,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
@@ -578,11 +618,11 @@ fun SKL0104G01Screen(
                                 )
                                 Button(
                                     onClick = { showHelpDialog = false },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                                    colors = actionButtonColors(),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                                 ) {
-                                    Text(text = "閉じる", color = Color.Black, fontSize = 14.sp)
+                                    Text(text = "閉じる", fontSize = 14.sp)
                                 }
                             }
                         },
@@ -647,6 +687,18 @@ fun SKL0104G01Screen(
                             }
                         },
                         confirmButton = {}
+                    )
+                }
+
+                if (showKeypadDialog && viewModel.isDataLoadedForRegister) {
+                    NumericKeypadDialog(
+                        initialValue = viewModel.konkaiShikyuSu,
+                        title = "今回支給数入力",
+                        onDismiss = { showKeypadDialog = false },
+                        onConfirm = { newValue ->
+                            viewModel.updateKonkaiShikyuSu(newValue)
+                            showKeypadDialog = false
+                        }
                     )
                 }
             }

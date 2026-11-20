@@ -149,7 +149,12 @@ class SKL0111G01ViewModel(
                             areaMessage = "対象データはありません"
                             writeLog("W", "明細データは0件です")
                         } else {
-                            areaMessage = "" // データがある場合はガイドをクリア
+                            // 保管エリアが未設定の間はガイドメッセージを維持する
+                            areaMessage = if (targetHokanAreaCd.isEmpty()) {
+                                "※『保管エリア』のQRコードを読み込んでください"
+                            } else {
+                                ""
+                            }
                             writeLog("I", "明細データ取得成功 -> 候補件数=${meisaiList.size}")
                         }
                     } else {

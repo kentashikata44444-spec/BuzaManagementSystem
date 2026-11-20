@@ -27,6 +27,14 @@ import com.example.buzaimanagementsystem.utils.FileLogger
 private const val TAG = "SKL0111G01Screen"
 
 @Composable
+private fun actionButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
+    containerColor = Color(0xFFE0E0E0),
+    contentColor = Color.Black,
+    disabledContainerColor = Color(0xFFF5F5F5),
+    disabledContentColor = Color(0xFFBDBDBD)
+)
+
+@Composable
 fun SKL0111G01Screen(
     viewModel: SKL0111G01ViewModel,
     userCd: String,
@@ -111,31 +119,31 @@ fun SKL0111G01Screen(
                 ) {
                     Button(
                         onClick = { onNavigateToAreaChange() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                        colors = actionButtonColors(),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .width(150.dp)
                             .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                     ) {
-                        Text(text = "保管エリア変更", fontSize = 13.sp, color = Color.Black, maxLines = 1)
+                        Text(text = "保管エリア変更", fontSize = 13.sp, maxLines = 1)
                     }
 
                     Button(
                         onClick = { onNavigateToMenu() },
                         enabled = viewModel.isMenuButtonEnabled, // 明細一覧が0件のときのみ有効化
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE0E0E0),
-                            disabledContainerColor = Color(0xFFF0F0F0)
-                        ),
+                        colors = actionButtonColors(),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .width(170.dp)
-                            .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                            .border(
+                                1.dp,
+                                if (viewModel.isMenuButtonEnabled) Color.Black else Color.LightGray,
+                                RoundedCornerShape(8.dp)
+                            )
                     ) {
                         Text(
                             text = "仕分け・一時保管メニュー",
                             fontSize = 10.sp,
-                            color = Color.Black,
                             maxLines = 1
                         )
                     }
@@ -214,7 +222,7 @@ fun SKL0111G01Screen(
                         }
                     }
 
-// ==========================================
+                    // ==========================================
                     // ★ 保管資材メッセージエリア
                     // ==========================================
                     if (viewModel.errorMessage != null) {
@@ -362,11 +370,11 @@ fun SKL0111G01Screen(
                         )
                         Button(
                             onClick = { showHelpDialog = false },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                            colors = actionButtonColors(),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                         ) {
-                            Text(text = "閉じる", color = Color.Black, fontSize = 14.sp)
+                            Text(text = "閉じる", fontSize = 14.sp)
                         }
                     }
                 },

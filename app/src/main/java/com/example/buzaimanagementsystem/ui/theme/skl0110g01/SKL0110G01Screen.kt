@@ -22,10 +22,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.buzaimanagementsystem.R
-import com.example.buzaimanagementsystem.utils.SwipeWarningBox // ★ 追加
 import com.example.buzaimanagementsystem.utils.FileLogger
+import com.example.buzaimanagementsystem.utils.SwipeWarningBox
 
 private const val TAG = "SKL0110G01Screen"
+
+@Composable
+private fun actionButtonColors(): ButtonColors = ButtonDefaults.buttonColors(
+    containerColor = Color(0xFFE0E0E0),
+    contentColor = Color.Black,
+    disabledContainerColor = Color(0xFFF5F5F5),
+    disabledContentColor = Color(0xFFBDBDBD)
+)
 
 @Composable
 fun SKL0110G01Screen(
@@ -47,7 +55,6 @@ fun SKL0110G01Screen(
         viewModel.initParams(userCd, gymTntCd, gymTntMei, sourceDivision, seihinBango)
     }
 
-    // ★ 画面全体を SwipeWarningBox で囲み、下端からのスワイプ時に警告を表示する
     SwipeWarningBox(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -56,7 +63,6 @@ fun SKL0110G01Screen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // ★ 追加: APIのデータ取得（判定）が完了するまで画面を描画せず白紙でガードし、一瞬のチラつきを防ぐ
             if (viewModel.isLoading) {
                 Box(
                     modifier = Modifier
@@ -123,29 +129,41 @@ fun SKL0110G01Screen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            val isChangeEnabled = true
+                            val isTemporaryEnabled = viewModel.hokanBoxList.isEmpty()
+
                             Button(
                                 onClick = { onNavigateToChange() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                                enabled = isChangeEnabled,
+                                colors = actionButtonColors(),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .width(150.dp)
-                                    .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                    .border(
+                                        1.dp,
+                                        if (isChangeEnabled) Color.Black else Color.LightGray,
+                                        RoundedCornerShape(8.dp)
+                                    )
                             ) {
-                                Text(text = "保管資材変更", fontSize = 13.sp, color = Color.Black, maxLines = 1)
+                                Text(text = "保管資材変更", fontSize = 13.sp, maxLines = 1)
                             }
 
                             Button(
                                 onClick = { onNavigateToTemporary() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                                enabled = isTemporaryEnabled,
+                                colors = actionButtonColors(),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .width(170.dp)
-                                    .border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                    .border(
+                                        1.dp,
+                                        if (isTemporaryEnabled) Color.Black else Color.LightGray,
+                                        RoundedCornerShape(8.dp)
+                                    )
                             ) {
                                 Text(
                                     text = "一時保管(保管エリア確定)",
                                     fontSize = 10.sp,
-                                    color = Color.Black,
                                     maxLines = 1
                                 )
                             }
@@ -220,7 +238,6 @@ fun SKL0110G01Screen(
                                 ) {
                                     Text(text = "保管資材", fontSize = 14.sp)
 
-                                    // 黒丸の「？」ヘルプアイコン
                                     Box(
                                         modifier = Modifier
                                             .size(20.dp)
@@ -371,11 +388,11 @@ fun SKL0110G01Screen(
                             )
                             Button(
                                 onClick = { showHelpDialog = false },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0E0E0)),
+                                colors = actionButtonColors(),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
                             ) {
-                                Text(text = "閉じる", color = Color.Black, fontSize = 14.sp)
+                                Text(text = "閉じる", fontSize = 14.sp)
                             }
                         }
                     },
@@ -389,7 +406,6 @@ fun SKL0110G01Screen(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // コンビテナ
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "コンビテナ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -400,7 +416,6 @@ fun SKL0110G01Screen(
                                 )
                             }
 
-                            // パレット
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "パレット", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -411,7 +426,6 @@ fun SKL0110G01Screen(
                                 )
                             }
 
-                            // 台車
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "台車", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -431,7 +445,6 @@ fun SKL0110G01Screen(
                                 }
                             }
 
-                            // 棚
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "棚", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 Spacer(modifier = Modifier.height(4.dp))
